@@ -1,36 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# StudySync
+
+A modern document management system built with Next.js 13+, Supabase, and Tailwind CSS.
+
+## Features
+
+- 🔐 **Secure Authentication**
+  - Email/Password authentication with Supabase
+  - Protected routes and middleware
+  - Seamless sign-up and sign-in experience
+
+- 📱 **Modern UI/UX**
+  - Responsive glassmorphic design
+  - Smooth animations with Framer Motion
+  - Custom animated backgrounds
+  - Dark mode optimized interface
+
+- 📂 **Document Management**
+  - Upload and organize documents
+  - Create folders and categories
+  - Rename and delete functionality
+  - Storage usage tracking
+
+- 🎯 **Dashboard**
+  - Quick overview of documents
+  - Recent activity tracking
+  - Storage usage visualization
+  - Quick action buttons
+
+## Tech Stack
+
+- **Frontend Framework**: Next.js 13+ (App Router)
+- **Authentication**: Supabase Auth
+- **Database**: Supabase
+- **Styling**: Tailwind CSS
+- **Animations**: Framer Motion
+- **Icons**: Heroicons
 
 ## Getting Started
 
-First, run the development server:
+1. **Clone and Install**
+   ```bash
+   git clone [your-repo-url]
+   cd studysync-new
+   npm install
+   ```
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+2. **Environment Setup**
+   Create a `.env.local` file in the root directory:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+   ```
+
+3. **Run Development Server**
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000) to view the app.
+
+## Project Structure
+
+```
+studysync-new/
+├── app/
+│   ├── auth/                 # Authentication pages
+│   ├── dashboard/           # Dashboard and document management
+│   ├── components/          # Reusable components
+│   │   ├── DisplayPanel.tsx
+│   │   ├── PageTransition.tsx
+│   │   └── Sidebar.tsx
+│   └── lib/                # Utility functions and configs
+├── public/                 # Static assets
+└── ...config files
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Key Components
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **DisplayPanel**: Main content wrapper with responsive behavior
+- **Sidebar**: Navigation component with authentication state
+- **PageTransition**: Smooth page transition animations
+- **Auth Pages**: Complete authentication flow with error handling
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Styling
 
-## Learn More
+The project uses a custom design system with:
+- Glassmorphic UI elements
+- Purple accent colors
+- Custom animated backgrounds
+- Responsive grid layouts
+- Dark mode optimization
 
-To learn more about Next.js, take a look at the following resources:
+## Contributing
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Feel free to contribute to this project. Open an issue or submit a pull request.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## License
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT License - feel free to use this project for your own purposes.
