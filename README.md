@@ -17,7 +17,11 @@ A modern document management system built with Next.js 13+, Supabase, and Tailwi
 
 - 📂 **Document Management**
   - Upload and organize documents
-  - Create folders and categories
+  - Create topics and categories
+  - Advanced filtering and sorting
+  - File type categorization
+  - Search functionality
+  - Bulk actions support
   - Rename and delete functionality
   - Storage usage tracking
 
@@ -26,6 +30,8 @@ A modern document management system built with Next.js 13+, Supabase, and Tailwi
   - Recent activity tracking
   - Storage usage visualization
   - Quick action buttons
+  - Topic management
+  - Document filtering and sorting
 
 ## Tech Stack
 

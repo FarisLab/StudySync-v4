@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -27,7 +27,30 @@ const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClientComponentClient();
-  const storageUsed = 45; // Example: 45%
+  const [storageUsed, setStorageUsed] = useState(0);
+
+  useEffect(() => {
+    const calculateStorageUsed = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('documents')
+          .select('size')
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
+
+        if (error) throw error;
+
+        const totalBytes = data.reduce((acc, doc) => acc + doc.size, 0);
+        const totalGB = totalBytes / (1024 * 1024 * 1024);
+        const percentage = Math.min(Math.round((totalGB / 2) * 100), 100); // Assuming 2GB limit
+        setStorageUsed(percentage);
+      } catch (error) {
+        console.error('Error calculating storage:', error);
+        setStorageUsed(0);
+      }
+    };
+
+    calculateStorageUsed();
+  }, [supabase]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
