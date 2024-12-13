@@ -5,25 +5,46 @@ import { motion } from 'framer-motion';
 import Sidebar from '../components/Sidebar';
 import DisplayPanel from '../components/DisplayPanel';
 import PageTransition from '../components/PageTransition';
-import UploadDialog from '../components/UploadDialog';
 import DocumentsToolbar from '../components/DocumentsToolbar';
+import FileItem from '../components/FileItem';
+import TopicDialog from '../components/TopicDialog';
+import { 
+  XMarkIcon, 
+  FolderIcon,
+  Squares2X2Icon,
+  BookOpenIcon,
+  AcademicCapIcon,
+  BeakerIcon,
+  CalculatorIcon,
+  CodeBracketIcon,
+  DocumentTextIcon,
+  GlobeAltIcon,
+  MusicalNoteIcon,
+  PaintBrushIcon,
+  PuzzlePieceIcon,
+  RocketLaunchIcon,
+  SparklesIcon,
+} from '@heroicons/react/24/outline';
 import { 
   FolderPlusIcon, 
   ArrowUpTrayIcon, 
   TrashIcon,
   PencilIcon,
-  FolderIcon,
   DocumentIcon,
   CloudArrowDownIcon,
   PlusIcon,
   ChevronRightIcon,
-  XMarkIcon,
   MagnifyingGlassIcon,
   ArrowsUpDownIcon,
   FunnelIcon,
   EllipsisHorizontalIcon,
   ArrowDownTrayIcon,
   ArrowUturnRightIcon,
+  ListBulletIcon,
+  ShareIcon,
+  ArrowLeftIcon,
+  PencilSquareIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { FileOptions } from '@supabase/storage-js';
@@ -32,31 +53,58 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useRouter } from 'next/navigation';
 import { User } from '@supabase/supabase-js';
+import type { DocumentType } from '@/app/types/document.types';
 
 // Add types for documents
 interface Topic {
-  id: number;
+  id: string;
   name: string;
   color: string;
+  icon: string;
   user_id: string;
+  created_at: string;
+  documents: UserDocument[];
+}
+
+interface TopicDocument {
+  topic_id: string;
+  document_id: string;
   created_at: string;
 }
 
 interface UserDocument {
-  id: number;
+  id: string;
   name: string;
   type: string;
   size: number;
   created_at: string;
   user_id: string;
   storage_path: string;
-  topic_id: number | null;
+  topic_id: string | null;
   topic?: Topic | null;
 }
 
 interface ProgressEvent {
   loaded: number;
   total: number;
+}
+
+interface DocumentMetadata {
+  topic_id?: string;
+}
+
+interface UploadProgress {
+  progress: number;
+  status: 'pending' | 'uploading' | 'complete' | 'error';
+  fileName: string;
+}
+
+interface UploadResponse {
+  fileId: string;
+  url: string;
+  size: number;
+  type: string;
+  uploadedAt: Date;
 }
 
 const supabase = createClientComponentClient();
@@ -70,42 +118,64 @@ const formatFileSize = (bytes: number): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
+// Shared icon mapping with TopicDialog
+const PRESET_ICONS = [
+  { icon: FolderIcon, name: 'Folder' },
+  { icon: BookOpenIcon, name: 'Book' },
+  { icon: AcademicCapIcon, name: 'Academic' },
+  { icon: BeakerIcon, name: 'Science' },
+  { icon: CalculatorIcon, name: 'Math' },
+  { icon: CodeBracketIcon, name: 'Code' },
+  { icon: DocumentTextIcon, name: 'Notes' },
+  { icon: GlobeAltIcon, name: 'Geography' },
+  { icon: MusicalNoteIcon, name: 'Music' },
+  { icon: PaintBrushIcon, name: 'Art' },
+  { icon: PuzzlePieceIcon, name: 'Games' },
+  { icon: RocketLaunchIcon, name: 'Physics' },
+  { icon: SparklesIcon, name: 'Magic' },
+] as const;
+
 export default function Documents() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [selectedDocuments, setSelectedDocuments] = useState<number[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
+  const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [showSuccessMessage, setShowSuccessMessage] = useState('');
   const [uploadError, setUploadError] = useState('');
   const [documents, setDocuments] = useState<UserDocument[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [selectedTopic, setSelectedTopic] = useState<number | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [isAddingTopic, setIsAddingTopic] = useState(false);
   const [isEditingTopic, setIsEditingTopic] = useState(false);
-  const [editingTopicId, setEditingTopicId] = useState<number | null>(null);
+  const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
   const [newTopicName, setNewTopicName] = useState('');
   const [newTopicColor, setNewTopicColor] = useState('#6366F1');
+  const [newTopicIcon, setNewTopicIcon] = useState('Folder');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name');
-  const [fileTypeFilter, setFileTypeFilter] = useState('all');
-  const [showTopicMenu, setShowTopicMenu] = useState(null);
-  const [showFileMenu, setShowFileMenu] = useState(null);
+  const [fileTypeFilter, setFileTypeFilter] = useState<DocumentType | 'all'>('all');
+  const [showFileMenu, setShowFileMenu] = useState<string | null>(null);
+  const [showTopicMenu, setShowTopicMenu] = useState<string | null>(null);
   const [isRenamingTopic, setIsRenamingTopic] = useState(false);
   const [topicNewName, setTopicNewName] = useState('');
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [topicsSearchQuery, setTopicsSearchQuery] = useState('');
   const [topicsSortBy, setTopicsSortBy] = useState('name');
   const [uncategorizedSearchQuery, setUncategorizedSearchQuery] = useState('');
   const [uncategorizedSortBy, setUncategorizedSortBy] = useState('name');
-  const [uncategorizedFileTypeFilter, setUncategorizedFileTypeFilter] = useState('all');
+  const [uncategorizedFileTypeFilter, setUncategorizedFileTypeFilter] = useState<DocumentType | 'all'>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [isTopicDialogOpen, setIsTopicDialogOpen] = useState(false);
+  const [topicDialogMode, setTopicDialogMode] = useState<'create' | 'edit'>('create');
+  const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -149,53 +219,46 @@ export default function Documents() {
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   const ALLOWED_FILE_TYPES = ['image/*', 'application/pdf', '.doc', '.docx', '.xls', '.xlsx'];
 
-  const handleFileUpload = async (files: FileList, topicId: number | null) => {
-    if (!files || !user) return;
-
-    setUploadError('');
+  const handleFileUpload = async (files: FileList, metadata?: DocumentMetadata): Promise<UploadResponse> => {
+    if (!user) throw new Error('Not authenticated');
+    
     setIsUploading(true);
-    const uploadPromises = [];
+    setUploadError('');
+    const uploadPromises: Promise<UploadResponse>[] = [];
+    const timestamp = new Date().getTime();
+    const currentTopicId = metadata?.topic_id;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      
-      // Validate file size
-      if (file.size > MAX_FILE_SIZE) {
-        setUploadError(`${file.name} is too large. Maximum size is 50MB`);
-        continue;
-      }
+      const uniqueId = Math.random().toString(36).substring(2, 15);
+      const filePath = `${user.id}/${timestamp}-${uniqueId}-${file.name}`;
 
-      // Validate file type
-      const isValidType = ALLOWED_FILE_TYPES.some(type => {
-        if (type.startsWith('.')) {
-          return file.name.toLowerCase().endsWith(type);
-        }
-        return file.type.match(new RegExp(type.replace('*', '.*')));
-      });
-
-      if (!isValidType) {
-        setUploadError(`${file.name} is not a supported file type`);
-        continue;
-      }
-
-      const promise = new Promise(async (resolve, reject) => {
+      const promise = new Promise<UploadResponse>(async (resolve, reject) => {
         try {
-          const filePath = `${user.id}/${Date.now()}-${file.name}`;
-          const { data, error: uploadError } = await supabase.storage
+          // First upload the file
+          const { data: uploadData, error: uploadError } = await supabase.storage
             .from('documents')
             .upload(filePath, file, {
-              onUploadProgress: (progress) => {
-                setUploadProgress(prev => ({
-                  ...prev,
-                  [file.name]: Math.round((progress.loaded / progress.total) * 100)
-                }));
-              }
+              cacheControl: '3600',
+              upsert: false
             });
 
-          if (uploadError) throw uploadError;
+          if (uploadError) {
+            throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
+          }
+
+          // Update progress after upload completes
+          setUploadProgress(prev => ({
+            ...prev,
+            [file.name]: {
+              progress: 100,
+              status: 'complete',
+              fileName: file.name
+            }
+          }));
           
           // Create document record
-          const { error: dbError } = await supabase
+          const { data: docData, error: dbError } = await supabase
             .from('documents')
             .insert([{
               name: file.name,
@@ -203,12 +266,41 @@ export default function Documents() {
               type: file.type,
               storage_path: filePath,
               user_id: user.id,
-              topic_id: topicId
-            }]);
+              topic_id: currentTopicId,
+              created_at: new Date().toISOString()
+            }])
+            .select()
+            .single();
 
-          if (dbError) throw dbError;
-          resolve(file.name);
+          if (dbError) {
+            // If database insert fails, clean up the uploaded file
+            await supabase.storage
+              .from('documents')
+              .remove([filePath]);
+            throw new Error(`Failed to create document record for ${file.name}: ${dbError.message}`);
+          }
+
+          // Get the URL for the uploaded file
+          const { data: { publicUrl } } = supabase.storage
+            .from('documents')
+            .getPublicUrl(filePath);
+
+          resolve({
+            fileId: docData.id.toString(),
+            url: publicUrl,
+            size: file.size,
+            type: file.type,
+            uploadedAt: new Date()
+          });
         } catch (error) {
+          setUploadProgress(prev => ({
+            ...prev,
+            [file.name]: {
+              progress: 0,
+              status: 'error',
+              fileName: file.name
+            }
+          }));
           reject(error);
         }
       });
@@ -217,42 +309,50 @@ export default function Documents() {
     }
 
     try {
-      const uploaded = await Promise.all(uploadPromises);
-      setShowSuccessMessage(`Successfully uploaded ${uploaded.length} file(s)`);
-      setTimeout(() => setShowSuccessMessage(''), 3000);
-      fetchDocuments();
-      setIsUploadDialogOpen(false);
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploadError('Failed to upload some files. Please try again.');
-    } finally {
-      setUploadProgress({});
+      const results = await Promise.all(uploadPromises);
+      await fetchDocuments(); // Refresh documents after all uploads complete
       setIsUploading(false);
+      return results[0]; // Return the first upload response
+    } catch (error) {
+      setIsUploading(false);
+      throw error;
     }
   };
 
-  const toggleFileSelection = (fileId: string) => {
+  const toggleFileSelection = (id: string) => {
     setSelectedFiles(prev => 
-      prev.includes(fileId) 
-        ? prev.filter(id => id !== fileId)
-        : [...prev, fileId]
+      prev.includes(id) 
+        ? prev.filter(fileId => fileId !== id)
+        : [...prev, id]
     );
   };
 
-  const handleBulkMove = async (targetTopicId: string | null) => {
+  const handleBulkMove = async (targetTopicId: string) => {
+    if (!selectedFiles.length) return;
+
     try {
+      const topicIdValue = targetTopicId === 'null' ? null : targetTopicId ? parseInt(targetTopicId) : null;
+      
       const { error } = await supabase
         .from('documents')
-        .update({ topic_id: targetTopicId })
+        .update({ topic_id: topicIdValue ? String(topicIdValue) : null })
         .in('id', selectedFiles);
 
       if (error) throw error;
 
-      setShowSuccessMessage(`Successfully moved ${selectedFiles.length} file(s)`);
+      // Update local state
+      setDocuments(prev =>
+        prev.map(doc =>
+          selectedFiles.includes(doc.id)
+            ? { ...doc, topic_id: topicIdValue ? String(topicIdValue) : null }
+            : doc
+        )
+      );
+
       setSelectedFiles([]);
-      fetchDocuments();
-    } catch (error) {
-      setUploadError('Failed to move files. Please try again.');
+    } catch (err) {
+      console.error('Error moving files:', err);
+      setError(err instanceof Error ? err.message : 'Failed to move files');
     }
   };
 
@@ -323,7 +423,6 @@ export default function Documents() {
 
       if (error) throw error;
 
-      // Create a download link
       const url = URL.createObjectURL(data);
       const a = window.document.createElement('a');
       a.href = url;
@@ -333,8 +432,8 @@ export default function Documents() {
       window.document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Error downloading file:', err);
-      setError(err instanceof Error ? err.message : 'Failed to download file');
+      console.error('Error downloading document:', err);
+      setError(err instanceof Error ? err.message : 'Failed to download document');
     }
   };
 
@@ -370,6 +469,7 @@ export default function Documents() {
           {
             name: newTopicName.trim(),
             color: newTopicColor,
+            icon: newTopicIcon,
             user_id: user.id,
           },
         ])
@@ -387,7 +487,7 @@ export default function Documents() {
     }
   };
 
-  const handleAssignTopic = async (documentId: number, topicId: number | null) => {
+  const handleAssignTopic = async (documentId: string, topicId: string | null) => {
     try {
       const { error } = await supabase
         .from('documents')
@@ -419,6 +519,7 @@ export default function Documents() {
         .update({
           name: topicNewName.trim(),
           color: newTopicColor,
+          icon: newTopicIcon,
         })
         .eq('id', editingTopicId);
 
@@ -427,7 +528,7 @@ export default function Documents() {
       setTopics(prev =>
         prev.map(topic =>
           topic.id === editingTopicId
-            ? { ...topic, name: topicNewName.trim(), color: newTopicColor }
+            ? { ...topic, name: topicNewName.trim(), color: newTopicColor, icon: newTopicIcon }
             : topic
         )
       );
@@ -436,7 +537,7 @@ export default function Documents() {
       setDocuments(prev =>
         prev.map(doc =>
           doc.topic_id === editingTopicId
-            ? { ...doc, topic: { ...doc.topic!, name: topicNewName.trim(), color: newTopicColor } }
+            ? { ...doc, topic: { ...doc.topic!, name: topicNewName.trim(), color: newTopicColor, icon: newTopicIcon } }
             : doc
         )
       );
@@ -451,7 +552,7 @@ export default function Documents() {
     }
   };
 
-  const handleDeleteTopic = async (topicId: number) => {
+  const handleDeleteTopic = async (topicId: string) => {
     try {
       const { error } = await supabase
         .from('topics')
@@ -481,10 +582,103 @@ export default function Documents() {
   };
 
   const startEditingTopic = (topic: Topic) => {
-    setEditingTopicId(topic.id);
-    setTopicNewName(topic.name);
-    setNewTopicColor(topic.color);
-    setIsEditingTopic(true);
+    setEditingTopic(topic);
+    setTopicDialogMode('edit');
+    setIsTopicDialogOpen(true);
+  };
+
+  const handleTopicSubmit = async (name: string, color: string, iconName: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      if (topicDialogMode === 'create') {
+        // Try to insert with icon field, fallback to without if column doesn't exist yet
+        const { data, error } = await supabase
+          .from('topics')
+          .insert([
+            {
+              name: name.trim(),
+              color: color,
+              icon: iconName,
+              user_id: user.id,
+            },
+          ])
+          .select()
+          .single();
+
+        if (error && error.message.includes('icon')) {
+          // If icon column doesn't exist, try without it
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('topics')
+            .insert([
+              {
+                name: name.trim(),
+                color: color,
+                user_id: user.id,
+              },
+            ])
+            .select()
+            .single();
+
+          if (fallbackError) throw fallbackError;
+          setTopics(prev => [...prev, { ...fallbackData, icon: 'Folder' }]);
+        } else if (error) {
+          throw error;
+        } else {
+          setTopics(prev => [...prev, data]);
+        }
+      } else {
+        if (!editingTopic) return;
+
+        // Try to update with icon field, fallback to without if column doesn't exist yet
+        const { error } = await supabase
+          .from('topics')
+          .update({
+            name: name.trim(),
+            color: color,
+            icon: iconName,
+          })
+          .eq('id', editingTopic.id);
+
+        if (error && error.message.includes('icon')) {
+          // If icon column doesn't exist, try without it
+          const { error: fallbackError } = await supabase
+            .from('topics')
+            .update({
+              name: name.trim(),
+              color: color,
+            })
+            .eq('id', editingTopic.id);
+
+          if (fallbackError) throw fallbackError;
+          
+          setTopics(prev =>
+            prev.map(topic =>
+              topic.id === editingTopic.id
+                ? { ...topic, name: name.trim(), color: color, icon: 'Folder' }
+                : topic
+            )
+          );
+        } else if (error) {
+          throw error;
+        } else {
+          setTopics(prev =>
+            prev.map(topic =>
+              topic.id === editingTopic.id
+                ? { ...topic, name: name.trim(), color: color, icon: iconName }
+                : topic
+            )
+          );
+        }
+      }
+
+      setIsTopicDialogOpen(false);
+      setEditingTopic(null);
+    } catch (err) {
+      console.error('Error managing topic:', err);
+      setError(err instanceof Error ? err.message : 'Failed to manage topic');
+    }
   };
 
   const fetchDocuments = async () => {
@@ -516,7 +710,7 @@ export default function Documents() {
     }
   };
 
-  const handleDeleteDocument = async (documentId: number) => {
+  const handleDeleteDocument = async (documentId: string) => {
     try {
       if (!user) return;
 
@@ -572,12 +766,12 @@ export default function Documents() {
       if (error) throw error;
 
       const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
+      const a = window.document.createElement('a');
       a.href = url;
       a.download = document.name;
-      document.body.appendChild(a);
+      window.document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
+      window.document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error downloading document:', err);
@@ -586,7 +780,7 @@ export default function Documents() {
   };
 
   // Drag and Drop handlers
-  const handleFileDrop = useCallback(async (documentId: number, targetTopicId: number | null) => {
+  const handleFileDrop = useCallback(async (documentId: string, targetTopicId: string | null) => {
     try {
       if (!user) return;
 
@@ -614,169 +808,59 @@ export default function Documents() {
     }
   }, [user, topics]);
 
-  // File Component with Drag support
-  const FileItem = ({ document }: { document: UserDocument }) => {
-    const [{ isDragging }, drag] = useDrag({
-      type: 'FILE',
-      item: { id: document.id, type: 'FILE' },
-      canDrag: () => !!user,
-      collect: (monitor) => ({
-        isDragging: monitor.isDragging(),
-      }),
-    });
-
-    return (
-      <div
-        ref={drag}
-        className={`flex items-center justify-between p-3 rounded-lg transition-colors group
-          ${isDragging ? 'opacity-50' : 'bg-white/5 hover:bg-white/8'}`}
-      >
-        <div className="flex items-center space-x-3">
-          <div className="p-2 rounded-lg bg-white/5">
-            <DocumentIcon className="w-5 h-5 text-purple-400" />
-          </div>
-          <div>
-            <h4 className="text-white font-medium">{document.name}</h4>
-            <p className="text-white/40 text-sm">
-              {format(new Date(document.created_at), 'MMM d, yyyy')} · {formatFileSize(document.size)}
-            </p>
-          </div>
-        </div>
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowFileMenu(document.id);
-            }}
-            className="p-1.5 rounded-lg hover:bg-white/10"
-          >
-            <EllipsisHorizontalIcon className="w-5 h-5 text-white/60" />
-          </button>
-          
-          {showFileMenu === document.id && (
-            <div 
-              className="absolute right-0 mt-8 w-48 bg-gray-900 rounded-lg border border-white/10 shadow-lg z-10"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="py-1">
-                <button
-                  onClick={() => handleRenameFile(document)}
-                  className="w-full px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 text-left flex items-center space-x-2"
-                >
-                  <PencilIcon className="w-4 h-4" />
-                  <span>Rename</span>
-                </button>
-                <button
-                  onClick={() => handleDownloadDocument(document)}
-                  className="w-full px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 text-left flex items-center space-x-2"
-                >
-                  <ArrowDownTrayIcon className="w-4 h-4" />
-                  <span>Download</span>
-                </button>
-                <button
-                  onClick={() => handleDeleteDocument(document.id)}
-                  className="w-full px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-white/5 text-left flex items-center space-x-2"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                  <span>Delete</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+  const handleTopicClick = (topic: Topic | null) => {
+    setSelectedTopic(topic?.id || null);
   };
 
-  // Topic Card with Drop support
-  const TopicCard = ({ topic }: { topic: Topic }) => {
-    const [{ isOver }, drop] = useDrop({
-      accept: 'FILE',
-      drop: (item: { id: number }) => handleFileDrop(item.id, topic.id),
-      canDrop: () => !!user,
-      collect: (monitor) => ({
-        isOver: monitor.isOver(),
-      }),
-    });
+  const handleDocumentSelect = (id: string) => {
+    if (selectedDocuments.includes(id)) {
+      setSelectedDocuments(selectedDocuments.filter((docId) => docId !== id));
+    } else {
+      setSelectedDocuments([...selectedDocuments, id]);
+    }
+  };
 
-    const topicDocuments = documents.filter(doc => doc.topic_id === topic.id);
-    const lastUpdated = topicDocuments.length > 0 
-      ? new Date(Math.max(...topicDocuments.map(doc => new Date(doc.created_at).getTime())))
-      : null;
-
+  // Topic Grid Component
+  const TopicGrid = () => {
     return (
-      <div
-        ref={drop}
-        onClick={() => setSelectedTopic(topic.id)}
-        className={`p-4 rounded-xl transition-all cursor-pointer group relative
-          ${isOver ? 'border-2 border-purple-500 bg-purple-500/10' :
-          selectedTopic === topic.id
-            ? 'bg-white/10 border-2 border-purple-500'
-            : 'bg-white/5 border border-white/10 hover:bg-white/8 hover:border-purple-500/30'
-          }`}
-      >
-        <div className="flex items-start justify-between">
-          <div className="flex items-center space-x-3">
-            <div 
-              className="p-3 rounded-lg bg-white/5"
-              style={{ backgroundColor: `${topic.color}20` }}
-            >
-              <FolderIcon className="w-6 h-6" style={{ color: topic.color }} />
-            </div>
-            <div>
-              <h3 className="text-white font-medium">{topic.name}</h3>
-              <p className="text-white/40 text-sm">
-                {topicDocuments.length} {topicDocuments.length === 1 ? 'file' : 'files'}
-              </p>
-            </div>
-          </div>
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+        {topics.map((topic) => {
+          const IconComponent = PRESET_ICONS.find(i => i.name === topic.icon)?.icon || FolderIcon;
+          return (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowTopicMenu(topic.id);
-              }}
-              className="p-1.5 rounded-lg hover:bg-white/10"
+              key={topic.id}
+              onClick={() => handleTopicClick(topic)}
+              className={`relative group overflow-hidden rounded-xl border border-white/10 
+                transition-all duration-200 hover:border-white/20
+                ${selectedTopic === topic.id ? 'bg-white/10' : 'bg-white/5'}`}
             >
-              <EllipsisHorizontalIcon className="w-5 h-5 text-white/60" />
-            </button>
-
-            {showTopicMenu === topic.id && (
+              {/* Color Accent */}
               <div 
-                className="absolute right-0 mt-2 w-48 bg-gray-900 rounded-lg border border-white/10 shadow-lg z-10"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="py-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startEditingTopic(topic);
-                    }}
-                    className="w-full px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 text-left flex items-center space-x-2"
-                  >
-                    <PencilIcon className="w-4 h-4" />
-                    <span>Rename</span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteTopic(topic.id);
-                    }}
-                    className="w-full px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-white/5 text-left flex items-center space-x-2"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                    <span>Delete</span>
-                  </button>
+                className="absolute inset-0 opacity-10 transition-opacity group-hover:opacity-15"
+                style={{ backgroundColor: topic.color }} 
+              />
+              
+              <div className="relative p-4 flex items-start gap-3">
+                <div 
+                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: topic.color + '20' }}
+                >
+                  <IconComponent 
+                    className="w-5 h-5"
+                    style={{ color: topic.color }} 
+                  />
+                </div>
+                
+                <div>
+                  <h3 className="text-white font-medium">{topic.name}</h3>
+                  <p className="text-white/40 text-sm">
+                    {topic.documents?.length || 0} {topic.documents?.length === 1 ? 'file' : 'files'}
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-        {lastUpdated && (
-          <p className="text-white/40 text-xs mt-3">
-            Last updated: {format(lastUpdated, 'MMM d, yyyy')}
-          </p>
-        )}
+            </button>
+          );
+        })}
       </div>
     );
   };
@@ -804,11 +888,14 @@ export default function Documents() {
           case 'pdf':
             return extension === 'pdf';
           case 'doc':
+          case 'docx':
             return ['doc', 'docx'].includes(extension);
-          case 'image':
-            return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension);
+          case 'txt':
+            return extension === 'txt';
+          case 'md':
+            return extension === 'md';
           case 'other':
-            return !['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension);
+            return !['pdf', 'doc', 'docx', 'txt', 'md'].includes(extension);
           default:
             return true;
         }
@@ -878,11 +965,14 @@ export default function Documents() {
           case 'pdf':
             return extension === 'pdf';
           case 'doc':
+          case 'docx':
             return ['doc', 'docx'].includes(extension);
-          case 'image':
-            return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension);
+          case 'txt':
+            return extension === 'txt';
+          case 'md':
+            return extension === 'md';
           case 'other':
-            return !['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension);
+            return !['pdf', 'doc', 'docx', 'txt', 'md'].includes(extension);
           default:
             return true;
         }
@@ -912,13 +1002,13 @@ export default function Documents() {
           <span className="text-white/70">
             {selectedFiles.length} file(s) selected
           </span>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <select
-              onChange={(e) => handleBulkMove(e.target.value || null)}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              onChange={(e) => handleBulkMove(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="">Move to...</option>
-              <option value={null}>Uncategorized</option>
+              <option value="null">Uncategorized</option>
               {topics.map(topic => (
                 <option key={topic.id} value={topic.id}>{topic.name}</option>
               ))}
@@ -930,21 +1020,15 @@ export default function Documents() {
       {/* Files Grid */}
       <div className="grid gap-3">
         {filteredAndSortedDocuments.map((document) => (
-          <div
+          <FileItem
             key={document.id}
-            className={`flex items-center p-3 rounded-lg transition-colors group
-              ${selectedFiles.includes(document.id) ? 'bg-purple-500/20' : 'bg-white/5 hover:bg-white/8'}`}
-          >
-            <div className="flex-shrink-0 mr-3">
-              <input
-                type="checkbox"
-                checked={selectedFiles.includes(document.id)}
-                onChange={() => toggleFileSelection(document.id)}
-                className="rounded border-white/10 text-purple-500 focus:ring-purple-500"
-              />
-            </div>
-            <FileItem document={document} />
-          </div>
+            document={document}
+            isSelected={selectedFiles.includes(document.id)}
+            onSelect={toggleFileSelection}
+            onDownload={handleDownloadDocument}
+            onRename={handleRenameFile}
+            viewMode={viewMode}
+          />
         ))}
       </div>
     </div>
@@ -987,287 +1071,249 @@ export default function Documents() {
           <Sidebar />
           <DisplayPanel>
             <PageTransition>
-              <div className="space-y-6">
+              <div className="h-[calc(100vh-240px)] max-h-[720px] flex flex-col">
                 {/* Header Section */}
-                <div className="bg-white/5 p-8 rounded-xl border border-white/10">
-                  <h1 className="text-3xl font-bold text-white mb-2">Documents</h1>
-                  <p className="text-white/60">Manage and organize your files</p>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <button
-                    onClick={() => setIsUploadDialogOpen(true)}
-                    className="bg-white/5 p-6 rounded-xl border border-white/10 hover:bg-white/10 transition-all hover:border-purple-500/50 text-left"
-                  >
-                    <ArrowUpTrayIcon className="h-6 w-6 text-purple-400 mb-4" />
-                    <h3 className="text-white/80 text-lg font-semibold">Upload Files</h3>
-                    <p className="text-white/40 text-sm mt-1">Add new documents to your workspace</p>
-                  </button>
-
-                  <div className="bg-white/5 p-6 rounded-xl border border-white/10">
-                    <h3 className="text-white/80 text-lg font-semibold mb-4">Storage</h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm text-white/60">
-                        <span>Used Space</span>
-                        <span>7.7 GB of 10 GB</span>
-                      </div>
-                      <div className="w-full bg-white/10 rounded-full h-2">
-                        <div className="bg-purple-500 h-2 rounded-full" style={{ width: '77%' }}></div>
-                      </div>
-                    </div>
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h1 className="text-2xl font-semibold text-white/90">Documents</h1>
+                    <p className="text-white/50 text-sm mt-1">Organize and manage your files</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsTopicDialogOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 
+                        text-purple-400/90 rounded-lg transition-all text-sm font-medium"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                      New Topic
+                    </button>
+                    <button
+                      onClick={() => {/* Add upload handler */}}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/90 to-purple-600/90 
+                        hover:from-purple-500 hover:to-purple-600 text-white rounded-lg transition-all text-sm font-medium"
+                    >
+                      <ArrowUpTrayIcon className="w-4 h-4" />
+                      Upload Files
+                    </button>
                   </div>
                 </div>
 
-                {/* Document Management */}
-                <div className="bg-white/5 p-6 rounded-xl border border-white/10">
-                  {/* Breadcrumb Navigation */}
-                  <nav className="flex items-center space-x-2 mb-6">
-                    <button 
-                      onClick={() => setSelectedTopic(null)}
-                      className="text-white hover:text-purple-400 transition-colors font-medium"
-                    >
-                      Your Documents
-                    </button>
-                    {selectedTopic && (
-                      <>
-                        <ChevronRightIcon className="w-4 h-4 text-white/40" />
-                        <span className="text-purple-400 font-medium">
-                          {topics.find(t => t.id === selectedTopic)?.name}
-                        </span>
-                      </>
-                    )}
-                  </nav>
+                {/* Main Content */}
+                <div className="flex-1 flex gap-6 min-h-0">
+                  {/* Left Panel - Topics */}
+                  <div className="w-80 flex flex-col bg-gradient-to-b from-white/[0.03] to-transparent 
+                    rounded-xl border border-white/10 overflow-hidden backdrop-blur-sm">
+                    <div className="p-4 border-b border-white/[0.06]">
+                      <input
+                        type="text"
+                        placeholder="Search topics..."
+                        className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-sm text-white/80 
+                          placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                        value={topicsSearchQuery}
+                        onChange={(e) => setTopicsSearchQuery(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3">
+                      <div className="space-y-1">
+                        {/* All Documents Option */}
+                        <button
+                          onClick={() => setSelectedTopic(null)}
+                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg 
+                            transition-all duration-200 group hover:bg-white/5
+                            ${!selectedTopic ? 'bg-white/10' : ''}`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <div 
+                              className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                              style={{ backgroundColor: 'rgb(147 51 234 / 0.2)' }}
+                            >
+                              <Squares2X2Icon 
+                                className="w-4 h-4 text-purple-500"
+                              />
+                            </div>
+                            <span className="font-medium">All Documents</span>
+                            <span className="ml-auto text-xs opacity-60">
+                              {documents.length}
+                            </span>
+                          </div>
+                        </button>
 
-                  {/* Split View Layout */}
-                  {!selectedTopic && (
-                    <div className="flex gap-6">
-                      {/* Topics Section (Left 2/3) */}
-                      <div className="flex-[2] space-y-4">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-xl font-semibold text-white">Topics</h2>
+                        {/* Topic List */}
+                        {topics.map((topic) => {
+                          const IconComponent = PRESET_ICONS.find(i => i.name === topic.icon)?.icon || FolderIcon;
+                          return (
+                            <button
+                              key={topic.id}
+                              onClick={() => setSelectedTopic(topic.id)}
+                              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg 
+                                transition-all duration-200 group hover:bg-white/5
+                                ${selectedTopic === topic.id ? 'bg-white/10' : ''}`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <div 
+                                  className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                                  style={{ backgroundColor: topic.color + '20' }}
+                                >
+                                  <IconComponent 
+                                    className="w-4 h-4"
+                                    style={{ color: topic.color }}
+                                  />
+                                </div>
+                                <span className="font-medium truncate">{topic.name}</span>
+                                <span className="ml-auto text-xs opacity-60">
+                                  {topic.documents?.length || 0}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Panel - Documents */}
+                  <div className="flex-1 flex flex-col bg-gradient-to-b from-white/[0.03] to-transparent 
+                    rounded-xl border border-white/10 overflow-hidden backdrop-blur-sm">
+                    {/* Toolbar */}
+                    <div className="flex-shrink-0 p-4 border-b border-white/[0.06]">
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                          <DocumentsToolbar
+                            searchQuery={selectedTopic ? searchQuery : uncategorizedSearchQuery}
+                            onSearchChange={selectedTopic ? setSearchQuery : setUncategorizedSearchQuery}
+                            sortBy={selectedTopic ? sortBy : uncategorizedSortBy}
+                            onSortChange={selectedTopic ? setSortBy : setUncategorizedSortBy}
+                            fileTypeFilter={selectedTopic ? fileTypeFilter : uncategorizedFileTypeFilter}
+                            onFilterChange={selectedTopic ? setFileTypeFilter : setUncategorizedFileTypeFilter}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 pl-4 border-l border-white/[0.06]">
                           <button
-                            onClick={() => setIsAddingTopic(true)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 
-                              text-purple-400 rounded-lg transition-colors"
+                            className={`p-2 rounded-lg hover:bg-white/[0.03] transition-colors
+                              ${viewMode === 'grid' 
+                                ? 'text-purple-400/90 bg-purple-500/20' 
+                                : 'text-white/40 hover:text-white/60'}`}
+                            onClick={() => setViewMode('grid')}
                           >
-                            <PlusIcon className="w-4 h-4" />
-                            <span className="text-sm">New Topic</span>
+                            <Squares2X2Icon className="w-5 h-5" />
+                          </button>
+                          <button
+                            className={`p-2 rounded-lg hover:bg-white/[0.03] transition-colors
+                              ${viewMode === 'list' 
+                                ? 'text-purple-400/90 bg-purple-500/20' 
+                                : 'text-white/40 hover:text-white/60'}`}
+                            onClick={() => setViewMode('list')}
+                          >
+                            <ListBulletIcon className="w-5 h-5" />
                           </button>
                         </div>
+                      </div>
+                    </div>
 
-                        {/* Topics Toolbar */}
-                        <div className="flex gap-3 mb-4">
-                          {/* Search */}
-                          <div className="relative flex-grow">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                              <MagnifyingGlassIcon className="h-4 w-4 text-white/40" />
-                            </div>
-                            <input
-                              type="text"
-                              value={topicsSearchQuery}
-                              onChange={(e) => setTopicsSearchQuery(e.target.value)}
-                              placeholder="Search topics..."
-                              className="w-full bg-black/30 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-white/40
-                                focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-transparent
-                                hover:border-white/20 transition-all"
-                            />
-                          </div>
+                    {/* Document List */}
+                    <div className="flex-1 overflow-y-auto">
+                      {isLoading ? (
+                        // Loading State
+                        <div className="h-full flex flex-col items-center justify-center text-white/40">
+                          <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin mb-3" />
+                          <p className="text-sm">Loading documents...</p>
+                        </div>
+                      ) : (selectedTopic ? topics.find(t => t.id === selectedTopic)?.documents : filteredAndSortedUncategorized)?.length === 0 ? (
+                        // Empty State
+                        <div className="h-full flex flex-col items-center justify-center text-white/40">
+                          <DocumentIcon className="w-12 h-12 mb-3" />
+                          <p className="text-sm mb-2">No documents found</p>
+                          <button
+                            onClick={() => {/* Add upload handler */}}
+                            className="text-purple-400/90 hover:text-purple-400 text-sm transition-colors"
+                          >
+                            Upload your first document
+                          </button>
+                        </div>
+                      ) : (
+                        // Document Grid/List
+                        <div className={viewMode === 'grid' 
+                          ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-6" 
+                          : "divide-y divide-white/[0.04]"
+                        }>
+                          {(selectedTopic ? topics.find(t => t.id === selectedTopic)?.documents : filteredAndSortedUncategorized)
+                            ?.map((doc) => (
+                              <FileItem
+                                key={doc.id}
+                                document={doc}
+                                isSelected={selectedFiles.includes(doc.id)}
+                                onSelect={toggleFileSelection}
+                                onDownload={handleDownloadDocument}
+                                onRename={handleRenameFile}
+                                viewMode={viewMode}
+                              />
+                            ))}
+                        </div>
+                      )}
+                    </div>
 
-                          {/* Sort */}
-                          <div className="relative">
-                            <select
-                              value={topicsSortBy}
-                              onChange={(e) => setTopicsSortBy(e.target.value)}
-                              className="appearance-none bg-black/30 border border-white/10 rounded-lg pl-9 pr-8 py-2 text-sm text-white
-                                focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-transparent
-                                hover:border-white/20 transition-all cursor-pointer"
+                    {/* Selected Files Actions */}
+                    {selectedFiles.length > 0 && (
+                      <div className="flex-shrink-0 p-4 bg-black/40 border-t border-white/[0.06] backdrop-blur-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-white/60">
+                              {selectedFiles.length} file(s) selected
+                            </span>
+                            <button
+                              onClick={() => setSelectedFiles([])}
+                              className="text-sm text-purple-400/90 hover:text-purple-400 transition-colors"
                             >
-                              <option value="name">Name</option>
-                              <option value="date">Date</option>
-                              <option value="count">File Count</option>
-                            </select>
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                              <ArrowsUpDownIcon className="h-4 w-4 text-white/40" />
-                            </div>
-                            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                              <svg className="h-4 w-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </div>
+                              Clear selection
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 
+                                text-white/60 hover:text-white/80 transition-all text-sm"
+                            >
+                              <ArrowDownTrayIcon className="w-4 h-4" />
+                              Download
+                            </button>
+                            <button
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 
+                                text-white/60 hover:text-white/80 transition-all text-sm"
+                            >
+                              <FolderPlusIcon className="w-4 h-4" />
+                              Move to Topic
+                            </button>
+                            <button
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 
+                                text-red-400/90 hover:text-red-400 transition-all text-sm"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                              Delete
+                            </button>
                           </div>
                         </div>
-
-                        {/* Topics List */}
-                        <div className="flex-1 overflow-y-auto">
-                          {isLoading ? (
-                            <div className="flex items-center justify-center h-32">
-                              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-purple-500"></div>
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {filteredAndSortedTopics.map((topic) => (
-                                <TopicCard key={topic.id} topic={topic} />
-                              ))}
-                            </div>
-                          )}
-                        </div>
                       </div>
-
-                      {/* Uncategorized Documents Section (Right 1/3) */}
-                      <div className="flex-1 border-l border-white/10 pl-6">
-                        <h2 className="text-xl font-semibold text-white mb-4">Uncategorized</h2>
-
-                        {/* Uncategorized Toolbar */}
-                        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                          {/* Search */}
-                          <div className="relative flex-grow">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                              <MagnifyingGlassIcon className="h-4 w-4 text-white/40" />
-                            </div>
-                            <input
-                              type="text"
-                              value={uncategorizedSearchQuery}
-                              onChange={(e) => setUncategorizedSearchQuery(e.target.value)}
-                              placeholder="Search files..."
-                              className="w-full bg-black/30 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-white/40
-                                focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-transparent
-                                hover:border-white/20 transition-all"
-                            />
-                          </div>
-
-                          <div className="flex gap-2">
-                            {/* Sort */}
-                            <div className="relative">
-                              <select
-                                value={uncategorizedSortBy}
-                                onChange={(e) => setUncategorizedSortBy(e.target.value)}
-                                className="appearance-none bg-black/30 border border-white/10 rounded-lg pl-9 pr-8 py-2 text-sm text-white
-                                  focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-transparent
-                                  hover:border-white/20 transition-all cursor-pointer"
-                              >
-                                <option value="name">Name</option>
-                                <option value="date">Date</option>
-                                <option value="size">Size</option>
-                              </select>
-                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <ArrowsUpDownIcon className="h-4 w-4 text-white/40" />
-                              </div>
-                              <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                                <svg className="h-4 w-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </div>
-
-                            {/* Filter */}
-                            <div className="relative">
-                              <select
-                                value={uncategorizedFileTypeFilter}
-                                onChange={(e) => setUncategorizedFileTypeFilter(e.target.value)}
-                                className="appearance-none bg-black/30 border border-white/10 rounded-lg pl-9 pr-8 py-2 text-sm text-white
-                                  focus:outline-none focus:ring-2 focus:ring-purple-500/70 focus:border-transparent
-                                  hover:border-white/20 transition-all cursor-pointer"
-                              >
-                                <option value="all">All Types</option>
-                                <option value="pdf">PDF</option>
-                                <option value="doc">Word</option>
-                                <option value="image">Images</option>
-                                <option value="other">Others</option>
-                              </select>
-                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <FunnelIcon className="h-4 w-4 text-white/40" />
-                              </div>
-                              <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                                <svg className="h-4 w-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Uncategorized Files List */}
-                        <div className="flex-1 overflow-y-auto">
-                          {isLoading ? (
-                            <div className="flex items-center justify-center h-32">
-                              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-purple-500"></div>
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {filteredAndSortedUncategorized.map((doc) => (
-                                <div
-                                  key={doc.id}
-                                  className={`flex items-center p-3 rounded-lg transition-colors group
-                                    ${selectedFiles.includes(doc.id) ? 'bg-purple-500/20' : 'bg-white/5 hover:bg-white/8'}`}
-                                >
-                                  <div className="flex-shrink-0 mr-3">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedFiles.includes(doc.id)}
-                                      onChange={() => toggleFileSelection(doc.id)}
-                                      className="rounded border-white/10 text-purple-500 focus:ring-purple-500"
-                                    />
-                                  </div>
-                                  <FileItem document={doc} />
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Selected Topic View */}
-                  {selectedTopic && (
-                    <div className="flex-1 overflow-hidden">
-                      <div className="h-full flex flex-col">
-                        {/* Toolbar */}
-                        <DocumentsToolbar
-                          searchQuery={searchQuery}
-                          onSearchChange={setSearchQuery}
-                          sortBy={sortBy}
-                          onSortChange={setSortBy}
-                          fileTypeFilter={fileTypeFilter}
-                          onFilterChange={setFileTypeFilter}
-                        />
-
-                        {/* Documents List */}
-                        <div className="flex-1 overflow-y-auto">
-                          {isLoading ? (
-                            <div className="text-center py-12">
-                              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-purple-500"></div>
-                            </div>
-                          ) : (
-                            <FileList />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             </PageTransition>
           </DisplayPanel>
         </div>
 
-        {/* Upload Dialog */}
-        <UploadDialog
-          isOpen={isUploadDialogOpen}
-          onClose={() => {
-            setIsUploadDialogOpen(false);
-            setUploadProgress({});
-            setUploadError('');
-          }}
-          onUpload={handleFileUpload}
-          topics={topics}
-          uploadProgress={uploadProgress}
-          isUploading={isUploading}
-          error={uploadError}
-        />
-        
         <Notifications />
+        <TopicDialog
+          isOpen={isTopicDialogOpen}
+          onClose={() => {
+            setIsTopicDialogOpen(false);
+            setEditingTopic(null);
+          }}
+          onSubmit={handleTopicSubmit}
+          mode={topicDialogMode}
+          initialName={editingTopic?.name}
+          initialColor={editingTopic?.color}
+          initialIcon={editingTopic?.icon}
+          error={error}
+        />
       </div>
     </DndProvider>
   );
