@@ -9,6 +9,10 @@ import {
   FolderIcon, 
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
+  BookOpenIcon,
+  UserGroupIcon,
+  CalendarIcon,
+  AcademicCapIcon,
 } from '@heroicons/react/24/outline';
 
 /**
@@ -41,6 +45,10 @@ interface StorageStats {
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Documents', href: '/documents', icon: FolderIcon },
+  { name: 'Study', href: '/study', icon: AcademicCapIcon },
+  { name: 'Groups', href: '/groups', icon: UserGroupIcon, badge: 'Soon' },
+  { name: 'Planner', href: '/planner', icon: CalendarIcon, badge: 'Soon' },
+  { name: 'Flashcards', href: '/flashcards', icon: BookOpenIcon, badge: 'Soon' },
   { name: 'Settings', href: '/dashboard/settings', icon: Cog6ToothIcon },
 ];
 
@@ -100,6 +108,11 @@ const Sidebar: React.FC<SidebarProps> = ({ className = '', storageLimit = 5 * 10
                 {/* Tooltip */}
                 <span className="absolute left-full ml-2 w-auto min-w-max rounded bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow transition-opacity group-hover:opacity-100">
                   {item.name}
+                  {item.badge && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px]">
+                      {item.badge}
+                    </span>
+                  )}
                 </span>
               </Link>
             );
