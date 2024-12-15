@@ -14,10 +14,18 @@ A modern document management system built with Next.js 13+, Supabase, and Tailwi
   - Smooth animations with Framer Motion
   - Custom animated backgrounds
   - Dark mode optimized interface
+  - Academic-themed icons for topics
 
 - 📂 **Document Management**
   - Upload and organize documents
-  - Create topics and categories
+    - Drag-and-drop file uploads
+    - Progress tracking
+    - File type validation
+    - Size limit enforcement (50MB)
+    - Error handling and feedback
+    - Topic association
+  - Create topics with custom colors and icons
+  - Edit and delete topics with document handling
   - Advanced filtering and sorting
   - File type categorization
   - Search functionality
@@ -30,8 +38,15 @@ A modern document management system built with Next.js 13+, Supabase, and Tailwi
   - Recent activity tracking
   - Storage usage visualization
   - Quick action buttons
-  - Topic management
+  - Visual topic management with icons
   - Document filtering and sorting
+
+- 🔍 **Type Safety**
+  - Comprehensive TypeScript integration
+  - Strict type checking enabled
+  - Consistent string-based IDs
+  - Type-safe API interactions
+  - Well-documented interfaces
 
 ## Tech Stack
 
@@ -40,66 +55,137 @@ A modern document management system built with Next.js 13+, Supabase, and Tailwi
 - **Database**: Supabase
 - **Styling**: Tailwind CSS
 - **Animations**: Framer Motion
+- **State Management**: React Hooks
+- **File Storage**: Supabase Storage
+- **Type System**: TypeScript
 - **Icons**: Heroicons
+
+## Development Standards
+
+### Code Organization
+
+- Next.js 13+ App Router directory structure
+- Modular component architecture
+- Clear client/server component separation
+- PascalCase for components, camelCase for utilities
+
+### TypeScript Standards
+
+- Strict type checking enabled
+- No `any` types unless necessary
+- Interface definitions in `.types.ts` files
+- Type-safe API interactions
+
+### Component Guidelines
+
+- Single responsibility principle
+- Custom hooks for reusable logic
+- Proper prop validation
+- Documented component APIs
+
+### State Management
+
+- React hooks for local state
+- Loading and error states
+- Null checks and edge cases
+- Documented state patterns
+
+### Styling
+
+- Tailwind CSS with project conventions
+- Purple accent color scheme
+- Glassmorphic design patterns
+- Responsive design principles
+
+### Security
+
+- No sensitive data in client code
+- Authentication checks
+- Input validation
+- Secure file handling
+
+### Testing
+
+- Unit tests for utilities
+- Component testing
+- Auth flow integration tests
+- E2E tests for critical paths
+
+### Documentation
+
+- JSDoc comments
+- Updated README.md
+- Maintained CHANGELOG.md
+- Environment setup docs
+
+### Error Handling
+
+- Consistent error messages
+- Error boundaries
+- User-friendly states
+- Debug logging
+
+### File Upload Rules
+
+- Maximum file size: 50MB
+- Supported file types:
+  - Documents: PDF, DOC, DOCX, XLS, XLSX
+  - Images: PNG, JPG, JPEG, GIF
+- Drag-and-drop support
+- Progress tracking
+- Error handling
+  - Size validation
+  - Type validation
+  - Upload errors
+- Topic association
+  - Files can be uploaded directly to topics
+  - Topic can be selected during upload
+- Bulk upload support
+  - Multiple files can be uploaded simultaneously
+  - Individual progress tracking per file
+  - Aggregate upload status
+
+### Accessibility
+
+- ARIA labels
+- Keyboard navigation
+- Color contrast
+- Screen reader support
 
 ## Getting Started
 
-1. **Clone and Install**
+1. Clone the repository
+
    ```bash
-   git clone [your-repo-url]
-   cd studysync-new
+   git clone https://github.com/yourusername/studysync-new.git
+   ```
+
+2. Install dependencies
+
+   ```bash
    npm install
    ```
 
-2. **Environment Setup**
-   Create a `.env.local` file in the root directory:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+3. Set up environment variables
+
+   ```bash
+   cp .env.example .env.local
    ```
 
-3. **Run Development Server**
+   Edit `.env.local` with your Supabase credentials.
+
+4. Run the development server
+
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) to view the app.
 
-## Project Structure
-
-```
-studysync-new/
-├── app/
-│   ├── auth/                 # Authentication pages
-│   ├── dashboard/           # Dashboard and document management
-│   ├── components/          # Reusable components
-│   │   ├── DisplayPanel.tsx
-│   │   ├── PageTransition.tsx
-│   │   └── Sidebar.tsx
-│   └── lib/                # Utility functions and configs
-├── public/                 # Static assets
-└── ...config files
-```
-
-## Key Components
-
-- **DisplayPanel**: Main content wrapper with responsive behavior
-- **Sidebar**: Navigation component with authentication state
-- **PageTransition**: Smooth page transition animations
-- **Auth Pages**: Complete authentication flow with error handling
-
-## Styling
-
-The project uses a custom design system with:
-- Glassmorphic UI elements
-- Purple accent colors
-- Custom animated backgrounds
-- Responsive grid layouts
-- Dark mode optimization
+5. Open [http://localhost:3000](http://localhost:3000)
 
 ## Contributing
 
-Feel free to contribute to this project. Open an issue or submit a pull request.
+Please read our [Contributing Guidelines](CONTRIBUTING.md) before making a contribution.
 
 ## License
 
-MIT License - feel free to use this project for your own purposes.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

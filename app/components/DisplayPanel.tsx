@@ -1,17 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 
+/**
+ * Props for the DisplayPanel component
+ * @property {React.ReactNode} children - Content to be displayed in the panel
+ * @property {number} minWidth - Minimum width before content is hidden
+ * @property {number} minHeight - Minimum height before content is hidden
+ * @property {string} className - Additional CSS classes
+ * @property {boolean} animate - Whether to animate size changes
+ */
 interface DisplayPanelProps {
   children: React.ReactNode;
   minWidth?: number;
   minHeight?: number;
+  className?: string;
+  animate?: boolean;
 }
 
-const DisplayPanel = ({ 
+/**
+ * A responsive panel component that gracefully handles content visibility
+ * based on its dimensions
+ */
+const DisplayPanel: React.FC<DisplayPanelProps> = ({ 
   children, 
   minWidth = 480, 
-  minHeight = 320
-}: DisplayPanelProps) => {
+  minHeight = 320,
+  className = '',
+  animate = true
+}) => {
   const [isContentVisible, setIsContentVisible] = useState(true);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -58,24 +74,24 @@ const DisplayPanel = ({
   return (
     <motion.div 
       ref={panelRef}
-      className="relative ml-16 min-h-screen p-2 sm:p-4 md:p-6 lg:p-8"
+      className={`fixed inset-y-0 left-16 right-0 flex flex-col p-6 z-10 ${className}`}
       initial="initial"
       animate="animate"
       exit="exit"
       variants={panelVariants}
     >
       <div className="absolute inset-0 overflow-hidden">
-        <div className="glow-orb absolute top-10 -left-10 w-48 h-48 sm:w-72 sm:h-72 md:w-96 md:h-96 bg-purple-500/30 rounded-full blur-3xl" />
-        <div className="glow-orb absolute bottom-10 right-10 w-48 h-48 sm:w-72 sm:h-72 md:w-96 md:h-96 bg-blue-500/30 rounded-full blur-3xl" />
-        <div className="glow-orb absolute top-1/2 left-1/2 w-48 h-48 sm:w-72 sm:h-72 md:w-96 md:h-96 bg-pink-500/20 rounded-full blur-3xl" />
+        <div className="glow-orb absolute -top-20 -left-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl opacity-70" />
+        <div className="glow-orb absolute bottom-20 right-20 w-[30rem] h-[30rem] bg-blue-500/20 rounded-full blur-3xl opacity-60" />
+        <div className="glow-orb absolute top-1/3 left-1/2 w-[35rem] h-[35rem] bg-pink-500/10 rounded-full blur-3xl opacity-50" />
       </div>
       <div 
-        className={`relative z-10 bg-black/40 backdrop-blur-lg rounded-xl sm:rounded-2xl border border-white/10 p-2 sm:p-4 md:p-6 transition-opacity duration-300 ${
+        className={`relative flex-1 transition-opacity duration-300 ${
           isContentVisible ? 'opacity-100' : 'opacity-0'
         }`}
       >
         {isContentVisible ? (
-          <div className="min-w-[280px]">
+          <div className="h-full">
             {children}
           </div>
         ) : (

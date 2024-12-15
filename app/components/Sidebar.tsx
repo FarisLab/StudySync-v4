@@ -11,10 +11,31 @@ import {
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 
+/**
+ * Navigation item type for sidebar links
+ */
 interface NavItem {
   name: string;
   href: string;
   icon: React.ForwardRefExoticComponent<React.SVGProps<SVGSVGElement>>;
+  badge?: number | string;
+}
+
+/**
+ * Props for the Sidebar component
+ */
+interface SidebarProps {
+  className?: string;
+  storageLimit?: number; // in bytes
+}
+
+/**
+ * Storage statistics type
+ */
+interface StorageStats {
+  used: number;      // in bytes
+  total: number;     // in bytes
+  percentage: number; // 0-100
 }
 
 const navigation: NavItem[] = [
@@ -23,7 +44,7 @@ const navigation: NavItem[] = [
   { name: 'Settings', href: '/dashboard/settings', icon: Cog6ToothIcon },
 ];
 
-const Sidebar = () => {
+const Sidebar: React.FC<SidebarProps> = ({ className = '', storageLimit = 5 * 1024 * 1024 * 1024 }) => {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClientComponentClient();
@@ -59,7 +80,7 @@ const Sidebar = () => {
   };
 
   return (
-    <div className="fixed left-0 top-0 h-full w-16 bg-black/40 backdrop-blur-lg border-r border-white/10">
+    <div className={`fixed left-0 top-0 h-full w-16 bg-black/40 backdrop-blur-lg border-r border-white/10 ${className}`}>
       <div className="flex h-full flex-col justify-between py-4">
         {/* Navigation */}
         <nav className="space-y-2 px-2">
