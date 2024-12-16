@@ -44,15 +44,17 @@ export const useTopicManagement = () => {
       const { data, error } = await supabase
         .from('topics')
         .insert([{ ...topicData, user_id: userId, icon: topicData.icon ?? 'Folder' }])
-        .select()
+        .select('*, documents(*)')
         .single();
 
       if (error) throw error;
 
+      // Update local state with the new topic
       setTopics(prev => [...prev, data]);
       setError(null);
       return data;
     } catch (err) {
+      console.error('Failed to create topic:', err);
       setError(err instanceof Error ? err.message : 'Failed to create topic');
       throw err;
     }
@@ -68,11 +70,13 @@ export const useTopicManagement = () => {
 
       if (error) throw error;
 
+      // Update local state with the updated topic
       setTopics(prev => prev.map(topic => 
         topic.id === topicId ? { ...topic, name: newName } : topic
       ));
       setError(null);
     } catch (err) {
+      console.error('Failed to rename topic:', err);
       setError(err instanceof Error ? err.message : 'Failed to rename topic');
     }
   };
@@ -80,18 +84,23 @@ export const useTopicManagement = () => {
   // Update topic
   const handleUpdateTopic = async (topicId: string, updates: Partial<Topic>) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('topics')
-        .update({ ...updates, icon: updates.icon ?? 'Folder' })
-        .eq('id', topicId);
+        .update(updates)
+        .eq('id', topicId)
+        .select()
+        .single();
 
       if (error) throw error;
 
+      // Update local state with the updated topic
       setTopics(prev => prev.map(topic => 
         topic.id === topicId ? { ...topic, ...updates } : topic
       ));
       setError(null);
+      return data;
     } catch (err) {
+      console.error('Failed to update topic:', err);
       setError(err instanceof Error ? err.message : 'Failed to update topic');
       throw err;
     }
@@ -122,6 +131,7 @@ export const useTopicManagement = () => {
       }
       setError(null);
     } catch (err) {
+      console.error('Failed to delete topic:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete topic');
     }
   };

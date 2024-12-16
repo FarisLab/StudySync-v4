@@ -29,7 +29,13 @@ A modern document management system built with Next.js 13+, Supabase, and Tailwi
   - Advanced filtering and sorting
   - File type categorization
   - Search functionality
-  - Bulk actions support
+  - Document Selection
+    - Click to toggle selection state
+    - Multi-select support
+    - Bulk actions on selected documents
+      - Move to topic
+      - Download as zip
+      - Delete
   - Rename and delete functionality
   - Storage usage tracking
 

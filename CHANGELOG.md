@@ -2,7 +2,7 @@
 
 All notable changes to StudySync will be documented in this file.
 
-## [Unreleased]
+## [Unreleased] - 2024-12-16
 
 ### Added
 - Topic Icons
@@ -44,6 +44,14 @@ All notable changes to StudySync will be documented in this file.
   - New DeleteTopicDialog component for confirming topic deletion
   - Documents in deleted topics are automatically moved to "Uncategorized"
   - Visual feedback and warnings when deleting topics with documents
+- Improved document selection mechanism
+  - Click to toggle document selection state
+  - Support for multiple document selection without modifier keys
+  - Bulk actions for selected documents (move, download, delete)
+- Enhanced documentation
+  - Updated README.md with latest features
+  - Added comprehensive JSDoc documentation to key components
+  - Documented document management functionality
 
 ### Changed
 - Updated UI components to use glassmorphic design
@@ -52,6 +60,9 @@ All notable changes to StudySync will be documented in this file.
 - Optimized search and filter performance with useMemo
 - Migrated all ID types from numbers to strings for consistency
 - Updated topic selection logic for better type safety
+- Simplified document selection UX
+- Updated component documentation for better maintainability
+- Improved type definitions and interfaces
 
 ### Fixed
 - Document sorting performance issues
@@ -66,6 +77,8 @@ All notable changes to StudySync will be documented in this file.
   - Improved document type filtering logic
   - Enhanced type definitions for file upload operations
   - Added proper type checking for document operations
+- Type inconsistencies in document management
+- Documentation gaps in component interfaces
 
 ## [1.0.0] - Initial Release
 

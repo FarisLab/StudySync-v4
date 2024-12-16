@@ -8,8 +8,6 @@ const supabase = createClientComponentClient();
 
 interface UseFileUploadProps {
   user: User | null;
-  onSuccess?: () => void;
-  onError?: (error: string) => void;
   topicId?: string | null;
 }
 
@@ -22,57 +20,77 @@ interface DocumentMetadata {
   topic_id?: string | null;
 }
 
-export const useFileUpload = ({ user, onSuccess, onError, topicId }: UseFileUploadProps) => {
+interface UploadResponse {
+  success: boolean;
+  error?: string;
+}
+
+export const useFileUpload = ({ user, topicId }: UseFileUploadProps) => {
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFileUpload = async (files: FileWithCustomName[], metadata?: DocumentMetadata) => {
+  const handleFileUpload = async (files: FileWithCustomName[], metadata?: DocumentMetadata): Promise<UploadResponse> => {
     if (!user) {
-      onError?.('User not authenticated');
-      return;
+      return { success: false, error: 'User not authenticated' };
     }
 
     setIsUploading(true);
+    console.log('Starting file upload in useFileUpload...');
 
     try {
       for (const file of files) {
         const fileName = file.customName || metadata?.name || file.name;
+        console.log('Uploading file:', fileName);
+        
         const fileExt = fileName.split('.').pop()?.toLowerCase();
         const fileType = getFileType(fileExt);
         
         if (!fileType) {
-          throw new Error(`Unsupported file type: ${fileExt}`);
+          return { success: false, error: `Unsupported file type: ${fileExt}` };
         }
 
         // Create a unique storage path
         const timestamp = Date.now();
         const storagePath = `${user.id}/${timestamp}-${fileName}`;
+        console.log('Storage path:', storagePath);
 
-        // Upload file to storage
+        // Upload file to Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from('documents')
           .upload(storagePath, file);
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          return { success: false, error: uploadError.message };
+        }
 
-        // Insert document record
-        const { error: insertError } = await supabase
+        // Insert document record into the database
+        const { error: dbError } = await supabase
           .from('documents')
-          .insert({
-            name: fileName,
-            type: fileType,
-            size: file.size,
-            storage_path: storagePath,
-            user_id: user.id,
-            topic_id: metadata?.topic_id || topicId,
-          });
+          .insert([
+            {
+              name: fileName,
+              storage_path: storagePath,
+              type: fileType,
+              size: file.size,
+              user_id: user.id,
+              topic_id: metadata?.topic_id || topicId,
+            },
+          ]);
 
-        if (insertError) throw insertError;
+        if (dbError) {
+          console.error('Database error:', dbError);
+          return { success: false, error: dbError.message };
+        }
       }
 
-      onSuccess?.();
+      console.log('All files uploaded successfully');
+      return { success: true };
     } catch (error) {
-      console.error('Upload error:', error);
-      onError?.(error instanceof Error ? error.message : 'Failed to upload file');
+      console.error('Unexpected error during upload:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unexpected error during upload'
+      };
     } finally {
       setIsUploading(false);
     }
@@ -80,7 +98,7 @@ export const useFileUpload = ({ user, onSuccess, onError, topicId }: UseFileUplo
 
   return {
     handleFileUpload,
-    isUploading,
+    isUploading
   };
 };
 

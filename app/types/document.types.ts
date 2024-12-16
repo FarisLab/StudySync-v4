@@ -16,10 +16,11 @@ export interface BaseDocument {
   type: string;
   size: number;
   created_at: string;
+  updated_at: string;
   user_id: string;
   storage_path: string;
   url?: string;
-  topic_id?: string | null;
+  topic_id?: string | undefined;
   topic?: {
     id: string;
     name: string;
@@ -29,7 +30,7 @@ export interface BaseDocument {
 }
 
 export interface UserDocument extends BaseDocument {
-  topic_id: string | null;
+  topic_id?: string | undefined;
 }
 
 export interface Topic {
@@ -43,7 +44,7 @@ export interface Topic {
 }
 
 export interface DocumentMetadata {
-  topic_id?: string;
+  topic_id?: string | undefined;
   pageCount?: number;
   author?: string;
   creationDate?: Date;
@@ -102,8 +103,10 @@ export interface TopicDocument {
 
 export interface UploadResponse {
   success: boolean;
+  error?: string;
+  progress?: UploadProgress[];
 }
 
 export interface Document extends BaseDocument {
-  topic_id?: string;
+  topic_id?: string | undefined;
 }

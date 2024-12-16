@@ -6,14 +6,14 @@ import { BaseDocument } from '@/app/types/document.types';
 interface RenameDialogProps {
   document: BaseDocument;
   isOpen: boolean;
-  onClose: () => void;
+  onCloseAction: () => void;
   onRename: (document: BaseDocument, newName: string) => Promise<void>;
 }
 
 const RenameDialog: React.FC<RenameDialogProps> = ({
   document,
   isOpen,
-  onClose,
+  onCloseAction,
   onRename,
 }) => {
   const [newName, setNewName] = useState(document.name);
@@ -30,7 +30,7 @@ const RenameDialog: React.FC<RenameDialogProps> = ({
     setIsSubmitting(true);
     try {
       await onRename(document, newName);
-      onClose();
+      onCloseAction();
     } catch (error) {
       console.error('Error renaming document:', error);
     } finally {
@@ -62,7 +62,7 @@ const RenameDialog: React.FC<RenameDialogProps> = ({
           <div className="flex justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={onCloseAction}
               className="px-4 py-2 text-white/70 hover:text-white transition-colors"
               disabled={isSubmitting}
             >

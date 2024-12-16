@@ -10,7 +10,7 @@ interface UploadProgressProps {
   status: 'pending' | 'uploading' | 'complete' | 'error';
   fileName: string;
   error?: string;
-  onClose: () => void;
+  onCloseAction: () => void;
 }
 
 const UploadProgress: React.FC<UploadProgressProps> = ({
@@ -18,7 +18,7 @@ const UploadProgress: React.FC<UploadProgressProps> = ({
   status,
   fileName,
   error,
-  onClose,
+  onCloseAction,
 }) => {
   if (status === 'pending' && !error) return null;
 
@@ -35,7 +35,7 @@ const UploadProgress: React.FC<UploadProgressProps> = ({
             {error ? 'Upload Failed' : status === 'complete' ? 'Upload Complete' : 'Uploading...'}
           </h3>
           <button
-            onClick={onClose}
+            onClick={onCloseAction}
             className="text-white/60 hover:text-white/80 transition-colors"
           >
             <XMarkIcon className="w-5 h-5" />

@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { BaseDocument, DocumentType, DocumentSortType } from '@/app/types/document.types';
 import { User } from '@supabase/auth-helpers-nextjs';
+import { downloadMultipleDocuments, downloadBlob } from '@/app/utils/downloadUtils';
+import { toast } from 'sonner';
 
 const supabase = createClientComponentClient();
 
@@ -12,6 +14,12 @@ interface UseDocumentManagementProps {
   selectedTopic: string | null;
 }
 
+/**
+ * Custom hook for managing document state and operations
+ * @param user - The current authenticated user
+ * @param selectedTopic - The currently selected topic ID
+ * @returns Object containing document state and management functions
+ */
 export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManagementProps) => {
   const [documents, setDocuments] = useState<BaseDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,7 +28,8 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
   const [sortBy, setSortBy] = useState<DocumentSortType>('name-asc');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [fileTypeFilter, setFileTypeFilter] = useState<DocumentType | 'all'>('all' as DocumentType | 'all');
-  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<BaseDocument[]>([]);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const fetchDocuments = useCallback(async () => {
     if (!user) return;
@@ -76,7 +85,7 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
 
       // Update local state
       setDocuments(prev => prev.filter(d => d.id !== document.id));
-      setSelectedDocuments(prev => prev.filter(id => id !== document.id));
+      setSelectedDocuments(prev => prev.filter(d => d.id !== document.id));
 
       return { success: true };
     } catch (err) {
@@ -128,18 +137,19 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
 
       const { error } = await supabase
         .from('documents')
-        .update({ topic_id: targetTopicId })
+        .update({ topic_id: targetTopicId || undefined })
         .eq('id', documentId)
         .eq('user_id', user.id);
 
       if (error) throw error;
 
       setDocuments(prev =>
-        prev.map(doc =>
-          doc.id === documentId
-            ? { ...doc, topic_id: targetTopicId || undefined }
-            : doc
-        )
+        prev.map(doc => {
+          if (doc.id === documentId) {
+            return { ...doc, topic_id: targetTopicId || undefined };
+          }
+          return doc;
+        })
       );
     } catch (err) {
       console.error('Error moving document:', err);
@@ -195,6 +205,95 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
     }
   };
 
+  const downloadSelectedDocuments = useCallback(async () => {
+    if (selectedDocuments.length === 0) return;
+
+    setIsDownloading(true);
+    try {
+      const zipBlob = await downloadMultipleDocuments(selectedDocuments);
+      
+      if (zipBlob) {
+        const timestamp = new Date().toISOString().split('T')[0];
+        downloadBlob(zipBlob, `documents-${timestamp}.zip`);
+      } else {
+        throw new Error('Failed to create download package');
+      }
+    } catch (err) {
+      console.error('Error downloading documents:', err);
+      setError(err instanceof Error ? err.message : 'Failed to download documents');
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [selectedDocuments]);
+
+  /**
+   * Handles document selection
+   * @param documentId - The ID of the document to select/deselect
+   * @param event - Optional mouse event (unused in current implementation)
+   * 
+   * Clicking a document toggles its selection state:
+   * - If the document is not selected, it will be added to the selection
+   * - If the document is already selected, it will be removed from the selection
+   * Multiple documents can be selected simultaneously
+   */
+  const handleDocumentSelect = useCallback((documentId: string, event?: React.MouseEvent) => {
+    const document = documents.find(d => d.id === documentId);
+    if (!document) return;
+
+    setSelectedDocuments(prev => {
+      // If document is already selected, remove it from selection
+      if (prev.some(d => d.id === documentId)) {
+        return prev.filter(d => d.id !== documentId);
+      }
+      // Add document to selection
+      return [...prev, document];
+    });
+  }, [documents]);
+
+  const handleMultipleDocumentsMove = async (documents: BaseDocument[], topicId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('documents')
+        .update({ topic_id: topicId })
+        .in('id', documents.map(d => d.id));
+
+      if (error) throw error;
+
+      setDocuments(prev =>
+        prev.map(doc => {
+          if (documents.some(d => d.id === doc.id)) {
+            return { ...doc, topic_id: topicId || undefined };
+          }
+          return doc;
+        })
+      );
+
+      setSelectedDocuments([]);
+      toast.success('Documents moved successfully');
+    } catch (error) {
+      console.error('Error moving documents:', error);
+      toast.error('Failed to move documents');
+    }
+  };
+
+  const handleMultipleDocumentsDelete = async (documents: BaseDocument[]) => {
+    try {
+      const { error } = await supabase
+        .from('documents')
+        .delete()
+        .in('id', documents.map(d => d.id));
+
+      if (error) throw error;
+
+      setDocuments(prev => prev.filter(doc => !documents.some(d => d.id === doc.id)));
+      setSelectedDocuments([]);
+      toast.success('Documents deleted successfully');
+    } catch (error) {
+      console.error('Error deleting documents:', error);
+      toast.error('Failed to delete documents');
+    }
+  };
+
   const filteredAndSortedDocuments = useMemo(() => {
     let filtered = documents.filter(doc => {
       if (fileTypeFilter === 'all') return true;
@@ -226,7 +325,6 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
 
   return {
     documents,
-    filteredAndSortedDocuments,
     isLoading,
     error,
     searchQuery,
@@ -239,10 +337,16 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
     setFileTypeFilter,
     selectedDocuments,
     setSelectedDocuments,
-    fetchDocuments,
+    downloadSelectedDocuments,
+    isDownloading,
     handleDeleteDocument,
     handleRenameDocument,
     handleMoveDocument,
     handleDownloadDocument,
+    handleMultipleDocumentsMove,
+    handleMultipleDocumentsDelete,
+    handleDocumentSelect,
+    fetchDocuments,
+    filteredAndSortedDocuments,
   };
 };

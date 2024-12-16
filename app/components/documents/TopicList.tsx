@@ -69,13 +69,9 @@ const TopicList: React.FC<TopicListProps> = ({
           value={topicsSearchQuery}
           onChange={(e) => setTopicsSearchQuery(e.target.value)}
           placeholder="Search topics..."
-          className="w-full pl-10 pr-10 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+          className="w-full pl-10 pr-4 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
         />
         <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-        <PlusIcon
-          className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40 hover:text-purple-400 cursor-pointer transition-colors"
-          onClick={onCreateTopic}
-        />
       </div>
 
       <div className="flex-1 space-y-1.5 overflow-y-auto mt-4 pr-2">

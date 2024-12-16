@@ -2,17 +2,24 @@ import React from 'react';
 import { BaseDocument } from '@/app/types/document.types';
 import { ViewMode } from '@/app/types';
 import DocumentCard from './DocumentCard';
+import { getFileIcon } from '@/app/utils/fileIcons';
+import { MultiDocumentActions } from './MultiDocumentActions';
 
 interface DocumentListProps {
   documents: BaseDocument[];
   viewMode: ViewMode;
-  selectedDocuments: string[];
+  selectedDocuments: BaseDocument[];
   onDocumentSelect: (documentId: string, event?: React.MouseEvent) => void;
   onDocumentClick: (document: BaseDocument) => void;
   onDownload: (document: BaseDocument) => Promise<void>;
   onRename: (document: BaseDocument) => void;
   onDelete: (document: BaseDocument) => void;
   onUpload?: () => void;
+  downloadSelectedDocumentsAction: () => Promise<void>;
+  isDownloading: boolean;
+  setSelectedDocumentsAction: (documents: BaseDocument[]) => void;
+  onMoveToTopicAction: (documents: BaseDocument[], topicId: string | null) => Promise<void>;
+  onBatchDeleteAction: (documents: BaseDocument[]) => Promise<void>;
 }
 
 const DocumentList: React.FC<DocumentListProps> = ({
@@ -25,6 +32,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
   onRename,
   onDelete,
   onUpload,
+  downloadSelectedDocumentsAction,
+  isDownloading,
+  setSelectedDocumentsAction,
+  onMoveToTopicAction,
+  onBatchDeleteAction,
 }) => {
   if (documents.length === 0) {
     return (
@@ -52,16 +64,31 @@ const DocumentList: React.FC<DocumentListProps> = ({
     );
   }
 
-  return viewMode === 'grid' ? (
-    <div className="max-h-[calc(100vh-14rem)] overflow-y-auto custom-scrollbar">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-max">
+  return (
+    <div className="relative">
+      {selectedDocuments.length > 0 && (
+        <MultiDocumentActions
+          selectedDocuments={selectedDocuments}
+          setSelectedDocumentsAction={setSelectedDocumentsAction}
+          downloadSelectedDocumentsAction={downloadSelectedDocumentsAction}
+          isDownloading={isDownloading}
+          onMoveToTopicAction={onMoveToTopicAction}
+          onDeleteAction={onBatchDeleteAction}
+        />
+      )}
+      
+      <div className={`grid gap-4 ${
+        viewMode === 'grid' 
+          ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
+          : 'grid-cols-1'
+      }`}>
         {documents.map((document) => (
           <DocumentCard
             key={document.id}
             document={document}
             viewMode={viewMode}
-            isSelected={selectedDocuments.includes(document.id)}
-            onSelect={(e: React.MouseEvent) => onDocumentSelect(document.id, e)}
+            isSelected={selectedDocuments.some(d => d.id === document.id)}
+            onSelect={(e) => onDocumentSelect(document.id, e)}
             onClick={() => onDocumentClick(document)}
             onDownload={() => onDownload(document)}
             onRename={() => onRename(document)}
@@ -69,22 +96,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
           />
         ))}
       </div>
-    </div>
-  ) : (
-    <div className="max-h-[calc(100vh-14rem)] overflow-y-auto custom-scrollbar flex flex-col gap-2">
-      {documents.map((document) => (
-        <DocumentCard
-          key={document.id}
-          document={document}
-          viewMode={viewMode}
-          isSelected={selectedDocuments.includes(document.id)}
-          onSelect={(e: React.MouseEvent) => onDocumentSelect(document.id, e)}
-          onClick={() => onDocumentClick(document)}
-          onDownload={() => onDownload(document)}
-          onRename={() => onRename(document)}
-          onDelete={() => onDelete(document)}
-        />
-      ))}
     </div>
   );
 };

@@ -26,6 +26,7 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 
+import { Document } from '@/app/types';
 import { BaseDocument, DocumentType, DocumentSortType, ViewMode, DocumentMetadata, TopicIcon } from '../types/document.types';
 import { Topic } from '@/app/types';
 import { useDocumentManagement } from '../hooks/useDocumentManagement';
@@ -35,6 +36,8 @@ import { useStorage } from '../hooks/useStorage';
 import RenameDialog from '../components/dialogs/RenameDialog';
 import UploadDialog from '../components/dialogs/UploadDialog';
 import SearchAndFilter from '../components/documents/SearchAndFilter';
+import DeleteConfirmationDialog from '../components/dialogs/DeleteConfirmationDialog';
+import Toast from '../components/Toast';
 
 import Sidebar from '../components/Sidebar';
 import DisplayPanel from '../components/DisplayPanel';
@@ -43,6 +46,7 @@ import TopicList from '../components/documents/TopicList';
 import DocumentList from '../components/documents/DocumentList';
 import ViewModeToggle from '../components/documents/ViewModeToggle';
 import TopicDialog from '../components/TopicDialog';
+import { MultiDocumentActions } from '@/app/components/documents/MultiDocumentActions';
 
 const supabase = createClientComponentClient();
 
@@ -67,6 +71,11 @@ const PRESET_ICONS: IconOption[] = [
   { icon: SparklesIcon, name: 'Magic' },
 ] as const;
 
+interface UploadResponse {
+  success: boolean;
+  error?: string;
+}
+
 export default function Documents() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -76,6 +85,13 @@ export default function Documents() {
   const [error, setError] = useState<string | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [documentToRename, setDocumentToRename] = useState<BaseDocument | null>(null);
+  const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+  const [documentsToDelete, setDocumentsToDelete] = useState<BaseDocument[]>([]);
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({
+    show: false,
+    message: '',
+    type: 'success',
+  });
 
   // Topic Management
   const {
@@ -117,119 +133,57 @@ export default function Documents() {
     setFileTypeFilter,
     selectedDocuments,
     setSelectedDocuments,
-    fetchDocuments,
+    downloadSelectedDocuments,
+    isDownloading,
     handleDeleteDocument,
     handleRenameDocument,
     handleMoveDocument,
     handleDownloadDocument,
+    handleMultipleDocumentsMove,
+    handleMultipleDocumentsDelete,
+    handleDocumentSelect,
+    fetchDocuments,
   } = useDocumentManagement({ user, selectedTopic });
 
   // File Upload Management
   const { handleFileUpload, isUploading } = useFileUpload({
     user,
-    onSuccess: () => {
-      setIsUploadDialogOpen(false);
-      fetchDocuments();
-    },
-    onError: (error) => {
-      console.error('Upload error:', error);
-      // You might want to show a toast or error message here
-    },
-    topicId: selectedTopic,
+    topicId: selectedTopic
   });
 
   // Storage Management
   const { usedStorage, totalStorage, percentUsed } = useStorage();
 
-  const handleDocumentUpload = async (files: FileList, metadata: DocumentMetadata): Promise<{ success: boolean }> => {
-    const fileArray = Array.from(files);
-    await handleFileUpload(fileArray, metadata);
-    return { success: true };
-  };
-
-  const handleDocumentSelect = (id: string, event?: React.MouseEvent) => {
-    const multiSelect = event?.ctrlKey || event?.metaKey;
-    if (multiSelect) {
-      setSelectedDocuments(prev => 
-        prev.includes(id) 
-          ? prev.filter(docId => docId !== id)
-          : [...prev, id]
-      );
-    } else {
-      setSelectedDocuments([id]);
-    }
-  };
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Authentication check
-  useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const { data: { user: currentUser }, error } = await supabase.auth.getUser();
-        if (error || !currentUser) {
-          router.push('/auth');
-          return;
-        }
-        setUser(currentUser);
-        await fetchTopics(currentUser.id);
-      } catch (err) {
-        console.error('Error checking user:', err);
-        router.push('/auth');
-      }
-    };
-
-    checkUser();
-  }, [router]);
-
-  useEffect(() => {
-    if (user) {
-      fetchDocuments();
-    }
-  }, [user, selectedTopic, fetchDocuments]);
-
-  const handleTopicSubmit = async (name: string, color: string, icon: TopicIcon) => {
-    if (!user) return;
-
+  const handleDocumentUpload = async (files: File[], metadata: DocumentMetadata): Promise<UploadResponse> => {
     try {
-      if (topicDialogMode === 'create') {
-        await handleCreateTopic(user.id, { name, color, icon });
-      } else {
-        if (editingTopicId) {
-          await handleUpdateTopic(editingTopicId, { name, color, icon });
-        }
+      console.log('Starting file upload...');
+      const response = await handleFileUpload(files, metadata);
+      console.log('Upload response:', response);
+      
+      if (response.success) {
+        setToast({
+          show: true,
+          message: 'Files uploaded successfully',
+          type: 'success'
+        });
+        fetchDocuments();
       }
-      setIsCreatingTopic(false);
-      setEditingTopic(null);
-      setEditingTopicId(null);
+      
+      return response;
     } catch (error) {
-      console.error('Failed to handle topic:', error);
-      setError(error instanceof Error ? error.message : 'Failed to handle topic');
-    }
-  };
-
-  const handleTopicClick = (topicId: string | null) => {
-    setSelectedTopic(topicId === selectedTopic ? null : topicId);
-  };
-
-  const startEditingTopic = (topic: Topic) => {
-    setEditingTopic(topic);
-    setEditingTopicId(topic.id);
-    setTopicName(topic.name);
-    setTopicDialogMode('edit');
-    setIsCreatingTopic(true);
-  };
-
-  const handleDeleteTopicConfirm = async (topicId: string) => {
-    try {
-      await deleteTopic(topicId);
-      setEditingTopic(null);
-      await fetchDocuments();
-    } catch (err) {
-      console.error('Error deleting topic:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete topic');
+      console.error('Upload error:', error);
+      const errorResponse: UploadResponse = {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to upload files'
+      };
+      
+      setToast({
+        show: true,
+        message: errorResponse.error || 'Failed to upload files',
+        type: 'error'
+      });
+      
+      return errorResponse;
     }
   };
 
@@ -280,31 +234,101 @@ export default function Documents() {
     return filtered;
   }, [documents, searchQuery, fileTypeFilter, sortBy]);
 
+  // Get filtered and sorted documents once
   const filteredAndSortedDocuments = getFilteredAndSortedDocuments();
 
-  const handleDocumentDelete = async (document: BaseDocument) => {
-    const result = await handleDeleteDocument(document);
-    if (!result.success) {
-      // You might want to show a toast or error message here
-      console.error('Failed to delete document:', result.error);
+  const handleTopicSubmit = async (name: string, color: string, icon: TopicIcon) => {
+    if (!user) return;
+    
+    try {
+      if (topicDialogMode === 'create') {
+        const newTopic = await handleCreateTopic(user.id, { name, color, icon });
+        // No need to fetch topics since handleCreateTopic already updated the state with complete data
+      } else if (editingTopicId) {
+        await handleUpdateTopic(editingTopicId, { name, color, icon });
+        await fetchTopics(user.id); // Still need to refresh for updates
+      }
+      setIsCreatingTopic(false);
+      setEditingTopic(null);
+      setEditingTopicId(null);
+    } catch (error) {
+      console.error('Failed to handle topic:', error);
+      setError(error instanceof Error ? error.message : 'Failed to handle topic');
     }
   };
 
-  const handleDocumentRename = async (document: BaseDocument, newName: string) => {
-    const result = await handleRenameDocument(document, newName);
-    if (!result.success) {
-      // You might want to show a toast or error message here
-      console.error('Failed to rename document:', result.error);
+  const handleTopicClick = (topicId: string | null) => {
+    setSelectedTopic(topicId === selectedTopic ? null : topicId);
+  };
+
+  const startEditingTopic = (topic: Topic) => {
+    setEditingTopic(topic);
+    setEditingTopicId(topic.id);
+    setTopicName(topic.name);
+    setTopicDialogMode('edit');
+    setIsCreatingTopic(true);
+  };
+
+  const handleDeleteTopicConfirm = async (topicId: string) => {
+    try {
+      await deleteTopic(topicId);
+      setEditingTopic(null);
+      await fetchDocuments();
+    } catch (err) {
+      console.error('Error deleting topic:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete topic');
     }
   };
 
-  const handleDocumentDownload = async (document: BaseDocument) => {
-    const result = await handleDownloadDocument(document);
-    if (!result.success) {
-      // You might want to show a toast or error message here
-      console.error('Failed to download document:', result.error);
-    }
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ show: true, message, type });
   };
+
+  const handleDocumentDownloadWrapper = async (document: BaseDocument): Promise<void> => {
+    await handleDownloadDocument(document);
+  };
+
+  const handleDocumentRenameWrapper = async (document: BaseDocument, newName: string): Promise<void> => {
+    await handleRenameDocument(document, newName);
+  };
+
+  const handleDocumentDeleteWrapper = async (document: BaseDocument): Promise<void> => {
+    await handleDeleteDocument(document);
+  };
+
+  const handleMultipleDocumentsDeleteWrapper = () => {
+    handleMultipleDocumentsDelete(documentsToDelete);
+  };
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Authentication check
+  useEffect(() => {
+    const checkUser = async () => {
+      try {
+        const { data: { user: currentUser }, error } = await supabase.auth.getUser();
+        if (error || !currentUser) {
+          router.push('/auth');
+          return;
+        }
+        setUser(currentUser);
+        await fetchTopics(currentUser.id);
+      } catch (err) {
+        console.error('Error checking user:', err);
+        router.push('/auth');
+      }
+    };
+
+    checkUser();
+  }, [router]);
+
+  useEffect(() => {
+    if (user) {
+      fetchDocuments();
+    }
+  }, [user, selectedTopic, fetchDocuments]);
 
   if (!mounted) return null;
 
@@ -323,7 +347,7 @@ export default function Documents() {
                 {/* Left Panel - Topics */}
                 <div className="w-72 p-6 border-r border-white/10 flex flex-col h-full">
                   {/* Topics Section */}
-                  <div className="flex-1 flex flex-col min-h-0 mb-16">
+                  <div className="flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-semibold text-white">Topics</h2>
                       <button
@@ -333,7 +357,7 @@ export default function Documents() {
                         <PlusIcon className="w-5 h-5 text-white/60" />
                       </button>
                     </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto">
+                    <div className="h-[calc(100vh-320px)] overflow-y-auto mb-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent hover:scrollbar-thumb-white/20">
                       <TopicList
                         topics={topics}
                         documents={documents}
@@ -347,10 +371,10 @@ export default function Documents() {
                     </div>
                   </div>
 
-                  {/* Storage Section */}
-                  <div className="flex-none mb-8 pt-6 border-t border-white/10">
-                    <div className="mb-3">
-                      <h3 className="text-sm font-medium text-white/60 mb-2">Storage</h3>
+                  {/* Storage Section - Below topics */}
+                  <div className="border-t border-white/10 pt-6">
+                    <div className="mb-4">
+                      <h3 className="text-sm font-medium text-white/60 mb-3">Storage</h3>
                       <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-purple-500 to-purple-400" 
@@ -366,8 +390,8 @@ export default function Documents() {
                 </div>
 
                 {/* Right Panel - Documents */}
-                <div className="flex-1 p-6 flex flex-col h-full">
-                  {/* Header with Search, Filters, and Actions */}
+                <div className="flex-1 flex flex-col pl-6">
+                  {/* Search and actions bar */}
                   <div className="flex-none mb-6">
                     {/* Search, Filters and Actions Row */}
                     <div className="flex items-center gap-3">
@@ -394,23 +418,61 @@ export default function Documents() {
                     </div>
                   </div>
 
-                  {/* Document List */}
-                  <div className="flex-1 min-h-0 overflow-y-auto">
-                    <DocumentList
-                      documents={filteredAndSortedDocuments}
-                      viewMode={viewMode}
-                      selectedDocuments={selectedDocuments}
-                      onDocumentSelect={handleDocumentSelect}
-                      onDocumentClick={(doc) => console.log('clicked doc:', doc)}
-                      onDownload={handleDocumentDownload}
-                      onRename={(doc) => setDocumentToRename(doc)}
-                      onDelete={handleDocumentDelete}
-                      onUpload={() => setIsUploadDialogOpen(true)}
-                    />
-                  </div>
+                  {/* Documents list or empty state */}
+                  {filteredAndSortedDocuments.length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center">
+                      <div className="flex flex-col items-center p-8 bg-white/[0.02] rounded-2xl backdrop-blur-sm border border-white/[0.05] max-w-sm">
+                        <div className="w-12 h-12 mb-5 text-white/25">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-medium text-white/90 mb-1.5">No documents found</h3>
+                        <p className="text-sm text-white/50 text-center mb-6">Upload some documents or try a different search</p>
+                        <button
+                          onClick={() => setIsUploadDialogOpen(true)}
+                          className="inline-flex items-center px-4 h-9 bg-purple-600/90 hover:bg-purple-600 transition-colors rounded-lg text-sm text-white/90 font-medium"
+                        >
+                          <svg className="w-4 h-4 mr-2 -ml-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                          </svg>
+                          Upload Document
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-h-0 overflow-y-auto">
+                      <DocumentList
+                        documents={filteredAndSortedDocuments}
+                        viewMode={viewMode}
+                        selectedDocuments={selectedDocuments}
+                        onDocumentSelect={handleDocumentSelect}
+                        onDocumentClick={(doc) => console.log('clicked doc:', doc)}
+                        onDownload={handleDocumentDownloadWrapper}
+                        onRename={(doc) => setDocumentToRename(doc)}
+                        onDelete={handleDocumentDeleteWrapper}
+                        onUpload={() => setIsUploadDialogOpen(true)}
+                        downloadSelectedDocumentsAction={downloadSelectedDocuments}
+                        isDownloading={isDownloading}
+                        setSelectedDocumentsAction={setSelectedDocuments}
+                        onMoveToTopicAction={handleMultipleDocumentsMove}
+                        onBatchDeleteAction={handleMultipleDocumentsDelete}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </DndProvider>
+
+            {/* Multi-document actions */}
+            <MultiDocumentActions
+              selectedDocuments={selectedDocuments}
+              setSelectedDocumentsAction={setSelectedDocuments}
+              downloadSelectedDocumentsAction={downloadSelectedDocuments}
+              isDownloading={isDownloading}
+              onMoveToTopicAction={handleMultipleDocumentsMove}
+              onDeleteAction={handleMultipleDocumentsDelete}
+            />
           </PageTransition>
         </DisplayPanel>
       </div>
@@ -418,7 +480,7 @@ export default function Documents() {
       {/* Topic Dialog */}
       <TopicDialog
         isOpen={isCreatingTopic}
-        onClose={() => {
+        onCloseAction={() => {
           setIsCreatingTopic(false);
           setEditingTopic(null);
           setEditingTopicId(null);
@@ -435,7 +497,7 @@ export default function Documents() {
       {/* Upload Dialog */}
       <UploadDialog
         isOpen={isUploadDialogOpen}
-        onClose={() => setIsUploadDialogOpen(false)}
+        onCloseAction={() => setIsUploadDialogOpen(false)}
         onUpload={handleDocumentUpload}
         selectedTopic={selectedTopic}
       />
@@ -444,10 +506,27 @@ export default function Documents() {
         <RenameDialog
           document={documentToRename}
           isOpen={true}
-          onClose={() => setDocumentToRename(null)}
-          onRename={handleDocumentRename}
+          onCloseAction={() => setDocumentToRename(null)}
+          onRename={handleDocumentRenameWrapper}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        isOpen={isDeleteConfirmationOpen}
+        onCloseAction={() => setIsDeleteConfirmationOpen(false)}
+        onConfirmAction={handleMultipleDocumentsDeleteWrapper}
+        title="Delete Documents"
+        message={`Are you sure you want to delete ${documentsToDelete.length} documents? This action cannot be undone.`}
+      />
+
+      {/* Toast Notification */}
+      <Toast
+        show={toast.show}
+        message={toast.message}
+        type={toast.type}
+        onCloseAction={() => setToast(prev => ({ ...prev, show: false }))}
+      />
     </div>
   );
 }

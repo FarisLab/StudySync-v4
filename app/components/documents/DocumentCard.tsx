@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   CheckIcon,
@@ -6,11 +6,10 @@ import {
   PencilIcon,
   ArrowDownTrayIcon,
   TrashIcon,
-  DocumentIcon,
-  PhotoIcon,
-  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import { BaseDocument, ViewMode } from '@/app/types/document.types';
+import { getFileIcon } from '@/app/utils/fileIcons';
+import DeleteConfirmationDialog from '@/app/components/dialogs/DeleteConfirmationDialog'; // Assuming the DeleteConfirmationDialog component is in the same directory
 
 // Utility functions
 const formatFileSize = (bytes: number): string => {
@@ -21,32 +20,43 @@ const formatFileSize = (bytes: number): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
-const getDocumentIcon = (type: string) => {
-  switch (type) {
-    case 'pdf':
-      return DocumentIcon;
-    case 'image':
-      return PhotoIcon;
-    default:
-      return DocumentTextIcon;
-  }
-};
-
+/**
+ * Props for the DocumentCard component
+ */
 interface DocumentCardProps {
+  /** The document to display */
   document: BaseDocument;
+  /** Current view mode (grid or list) */
   viewMode: ViewMode;
+  /** Whether the document is currently selected */
   isSelected?: boolean;
+  /** Handler for document selection */
   onSelect?: (event: React.MouseEvent) => void;
+  /** Handler for document click */
   onClick?: () => void;
+  /** Handler for context menu */
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** Handler for document download */
   onDownload: () => void;
+  /** Handler for document deletion */
   onDelete?: () => void;
+  /** Handler for document rename */
   onRename?: () => void;
+  /** Props for drag handle functionality */
   dragHandleProps?: any;
 }
 
-const isGridMode = (mode: ViewMode): mode is 'grid' => mode === 'grid';
-
+/**
+ * Component that displays a single document as a card
+ * 
+ * Features:
+ * - Displays document metadata (name, type, size, date)
+ * - Shows selection state with visual indicators
+ * - Provides quick actions (download, rename, delete)
+ * - Supports both grid and list view modes
+ * - Handles document selection through click events
+ * - Shows topic association if document belongs to a topic
+ */
 const DocumentCard: React.FC<DocumentCardProps> = ({
   document,
   viewMode,
@@ -60,48 +70,10 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
   dragHandleProps,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
-  const [isCtrlPressed, setIsCtrlPressed] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const Icon = getDocumentIcon(document.type);
   const formattedDate = formatDistanceToNow(new Date(document.created_at), { addSuffix: true });
   const formattedSize = formatFileSize(document.size);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Control' || e.key === 'Meta') {
-        setIsCtrlPressed(true);
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Control' || e.key === 'Meta') {
-        setIsCtrlPressed(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        window.document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
-  }, []);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -118,8 +90,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
     return (
       <div
         className={`group relative bg-black/40 backdrop-blur-md border border-white/10 rounded-lg overflow-hidden 
-          hover:bg-black/30 transition-all cursor-pointer
-          ${isCtrlPressed ? 'hover:ring-1 hover:ring-purple-500/50' : ''}`}
+          hover:bg-black/30 transition-all cursor-pointer`}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         {...dragHandleProps}
@@ -136,13 +107,38 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
 
         <div className="p-4 flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <Icon className="w-8 h-8 text-white/70" />
+            <div className={`w-10 h-10 flex items-center justify-center rounded-lg 
+              ${document.type === 'pdf' ? 'bg-red-500/20' :
+                document.type === 'document' ? 'bg-blue-500/20' :
+                document.type === 'image' ? 'bg-green-500/20' :
+                document.type === 'spreadsheet' ? 'bg-emerald-500/20' :
+                document.type === 'presentation' ? 'bg-orange-500/20' :
+                'bg-white/5'}`}>
+              <div className={`w-6 h-6 
+                ${document.type === 'pdf' ? 'text-red-500' :
+                  document.type === 'document' ? 'text-blue-500' :
+                  document.type === 'image' ? 'text-green-500' :
+                  document.type === 'spreadsheet' ? 'text-emerald-500' :
+                  document.type === 'presentation' ? 'text-orange-500' :
+                  'text-white/60'}`}>
+                {getFileIcon(document.name)}
+              </div>
+            </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-medium text-white truncate">{document.name}</h3>
-              <div className="flex items-center gap-2 mt-1 text-xs text-white/50">
-                <span>{formattedSize}</span>
-                <span>•</span>
-                <span>{formattedDate}</span>
+              <div className="flex items-center gap-2 mt-1 text-xs">
+                <span className={`px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wider
+                  ${document.type === 'pdf' ? 'bg-red-500/20 text-red-500' :
+                    document.type === 'document' ? 'bg-blue-500/20 text-blue-500' :
+                    document.type === 'image' ? 'bg-green-500/20 text-green-500' :
+                    document.type === 'spreadsheet' ? 'bg-emerald-500/20 text-emerald-500' :
+                    document.type === 'presentation' ? 'bg-orange-500/20 text-orange-500' :
+                    'bg-white/10 text-white/60'}`}>
+                  {document.type}
+                </span>
+                <span className="text-white/50">{formattedSize}</span>
+                <span className="text-white/50">•</span>
+                <span className="text-white/50">{formattedDate}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -200,7 +196,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete();
+                    setShowDeleteConfirm(true);
                     setShowMenu(false);
                   }}
                   className="w-full px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-white/10 
@@ -213,6 +209,18 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
             </div>
           </div>
         )}
+        {showDeleteConfirm && onDelete && (
+          <DeleteConfirmationDialog
+            isOpen={showDeleteConfirm}
+            onCloseAction={() => setShowDeleteConfirm(false)}
+            onConfirmAction={() => {
+              onDelete();
+              setShowDeleteConfirm(false);
+            }}
+            title="Delete Document"
+            message={`Are you sure you want to delete "${document.name}"? This action cannot be undone.`}
+          />
+        )}
       </div>
     );
   }
@@ -222,8 +230,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
       className={`group relative flex items-center hover:bg-white/5 transition-all w-full cursor-pointer
         ${isGridMode(viewMode) 
           ? 'bg-black/20 backdrop-blur-md rounded-xl overflow-hidden border border-white/5 hover:border-white/10' 
-          : 'border-b border-white/5'}
-        ${isCtrlPressed ? 'hover:ring-1 hover:ring-purple-500/50' : ''}`}
+          : 'border-b border-white/5'}`}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       {...dragHandleProps}
@@ -240,7 +247,23 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
 
       <div className={`flex-1 flex items-center gap-3 ${isGridMode(viewMode) ? 'p-4' : 'py-3 px-4'} ${isSelected ? 'pl-12' : ''}`}>
         <div className={`${isGridMode(viewMode) ? 'p-3 bg-white/5 rounded-lg' : ''}`}>
-          <Icon className={`${isGridMode(viewMode) ? 'w-8 h-8' : 'w-6 h-6'} text-white/70`} />
+          <div className={`w-10 h-10 flex items-center justify-center rounded-lg 
+            ${document.type === 'pdf' ? 'bg-red-500/20' :
+              document.type === 'document' ? 'bg-blue-500/20' :
+              document.type === 'image' ? 'bg-green-500/20' :
+              document.type === 'spreadsheet' ? 'bg-emerald-500/20' :
+              document.type === 'presentation' ? 'bg-orange-500/20' :
+              'bg-white/5'}`}>
+            <div className={`w-6 h-6 
+              ${document.type === 'pdf' ? 'text-red-500' :
+                document.type === 'document' ? 'text-blue-500' :
+                document.type === 'image' ? 'text-green-500' :
+                document.type === 'spreadsheet' ? 'text-emerald-500' :
+                document.type === 'presentation' ? 'text-orange-500' :
+                'text-white/60'}`}>
+              {getFileIcon(document.name)}
+            </div>
+          </div>
         </div>
         
         <div className="flex-1 min-w-0">
@@ -253,8 +276,17 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
             )}
           </div>
           <div className="flex items-center gap-4 mt-1 text-xs text-white/50">
-            <span>{formattedDate}</span>
-            <span>{formattedSize}</span>
+            <span className={`px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wider
+              ${document.type === 'pdf' ? 'bg-red-500/20 text-red-500' :
+                document.type === 'document' ? 'bg-blue-500/20 text-blue-500' :
+                document.type === 'image' ? 'bg-green-500/20 text-green-500' :
+                document.type === 'spreadsheet' ? 'bg-emerald-500/20 text-emerald-500' :
+                document.type === 'presentation' ? 'bg-orange-500/20 text-orange-500' :
+                'bg-white/10 text-white/60'}`}>
+              {document.type}
+            </span>
+            <span className="text-white/50">{formattedDate}</span>
+            <span className="text-white/50">{formattedSize}</span>
           </div>
         </div>
 
@@ -306,7 +338,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDelete();
+                  setShowDeleteConfirm(true);
                   setShowMenu(false);
                 }}
                 className="w-full px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-white/10 
@@ -318,6 +350,18 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
             )}
           </div>
         </div>
+      )}
+      {showDeleteConfirm && onDelete && (
+        <DeleteConfirmationDialog
+          isOpen={showDeleteConfirm}
+          onCloseAction={() => setShowDeleteConfirm(false)}
+          onConfirmAction={() => {
+            onDelete();
+            setShowDeleteConfirm(false);
+          }}
+          title="Delete Document"
+          message={`Are you sure you want to delete "${document.name}"? This action cannot be undone.`}
+        />
       )}
     </div>
   );
