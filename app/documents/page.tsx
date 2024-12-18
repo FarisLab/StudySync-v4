@@ -90,7 +90,7 @@ export default function Documents() {
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({
     show: false,
     message: '',
-    type: 'success',
+    type: 'success'
   });
 
   // Topic Management
@@ -121,6 +121,8 @@ export default function Documents() {
   // Document Management
   const {
     documents,
+    filteredDocuments,
+    filteredAndSortedDocuments,
     isLoading,
     error: documentError,
     searchQuery,
@@ -141,7 +143,7 @@ export default function Documents() {
     handleDownloadDocument,
     handleMultipleDocumentsMove,
     handleMultipleDocumentsDelete,
-    handleDocumentSelect,
+    handleDocumentSelect: handleDocumentSelectHook,
     fetchDocuments,
   } = useDocumentManagement({ user, selectedTopic });
 
@@ -152,7 +154,26 @@ export default function Documents() {
   });
 
   // Storage Management
-  const { usedStorage, totalStorage, percentUsed } = useStorage();
+  const [usedStorage, setUsedStorage] = useState(0);
+  const [totalStorage] = useState(10 * 1024 * 1024 * 1024); // 10GB
+  const [percentUsed, setPercentUsed] = useState(0);
+
+  // Calculate storage usage
+  useEffect(() => {
+    const calculateStorage = async () => {
+      try {
+        const totalBytes = documents.reduce((acc, doc) => acc + (doc.size || 0), 0);
+        setUsedStorage(totalBytes);
+        setPercentUsed(Math.min((totalBytes / totalStorage) * 100, 100));
+      } catch (error) {
+        console.error('Error calculating storage:', error);
+        setUsedStorage(0);
+        setPercentUsed(0);
+      }
+    };
+
+    calculateStorage();
+  }, [documents, totalStorage]);
 
   const handleDocumentUpload = async (files: File[], metadata: DocumentMetadata): Promise<UploadResponse> => {
     try {
@@ -186,56 +207,6 @@ export default function Documents() {
       return errorResponse;
     }
   };
-
-  const getFilteredAndSortedDocuments = useCallback(() => {
-    let filtered = [...documents];
-
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(doc => 
-        doc.name.toLowerCase().includes(query)
-      );
-    }
-
-    // Apply type filter
-    if (fileTypeFilter !== 'all') {
-      filtered = filtered.filter(doc => {
-        const extension = doc.name.split('.').pop()?.toLowerCase();
-        switch (fileTypeFilter) {
-          case 'pdf':
-            return extension === 'pdf';
-          case 'doc':
-            return extension === 'doc' || extension === 'docx';
-          case 'txt':
-            return extension === 'txt';
-          default:
-            return true;
-        }
-      });
-    }
-
-    // Apply sorting
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'name-asc':
-          return a.name.localeCompare(b.name);
-        case 'name-desc':
-          return b.name.localeCompare(a.name);
-        case 'date-desc':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        case 'date-asc':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        default:
-          return 0;
-      }
-    });
-
-    return filtered;
-  }, [documents, searchQuery, fileTypeFilter, sortBy]);
-
-  // Get filtered and sorted documents once
-  const filteredAndSortedDocuments = getFilteredAndSortedDocuments();
 
   const handleTopicSubmit = async (name: string, color: string, icon: TopicIcon) => {
     if (!user) return;
@@ -300,6 +271,66 @@ export default function Documents() {
     handleMultipleDocumentsDelete(documentsToDelete);
   };
 
+  const handleDocumentClick = (document: BaseDocument) => {
+    // Handle document click action
+    console.log('Document clicked:', document);
+  };
+
+  const handleStartRenaming = (document: BaseDocument) => {
+    setDocumentToRename(document);
+  };
+
+  const handleStartDeleting = (document: BaseDocument) => {
+    setDocumentsToDelete([document]);
+    setIsDeleteConfirmationOpen(true);
+  };
+
+  const handleStartUpload = () => {
+    setIsUploadDialogOpen(true);
+  };
+
+  const handleCreateTopicClick = () => {
+    setIsCreatingTopic(true);
+  };
+
+  const handleDownloadWrapper = async (document: BaseDocument): Promise<void> => {
+    await handleDownloadDocument(document);
+  };
+
+  const handleMoveDocuments = async (documents: BaseDocument[], topicId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('documents')
+        .update({ topic_id: topicId })
+        .in('id', documents.map(doc => doc.id));
+
+      if (error) throw error;
+
+      // Update local state
+      fetchDocuments();
+
+      // Clear selection after move
+      setSelectedDocuments([]);
+    } catch (error) {
+      console.error('Error moving documents:', error);
+      // TODO: Show error toast
+    }
+  };
+
+  const handleDocumentSelect = (documentId: string, event?: React.MouseEvent) => {
+    const document = documents.find(d => d.id === documentId);
+    if (!document) return;
+
+    setSelectedDocuments(prev => {
+      // If document is already selected, remove it from selection
+      if (prev.some(d => d.id === documentId)) {
+        return prev.filter(d => d.id !== documentId);
+      }
+      // Add document to selection
+      return [...prev, document];
+    });
+  };
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -324,11 +355,12 @@ export default function Documents() {
     checkUser();
   }, [router]);
 
+  // Fetch documents only when user changes
   useEffect(() => {
     if (user) {
       fetchDocuments();
     }
-  }, [user, selectedTopic, fetchDocuments]);
+  }, [user, fetchDocuments]);
 
   if (!mounted) return null;
 
@@ -345,19 +377,19 @@ export default function Documents() {
             <DndProvider backend={HTML5Backend}>
               <div className="flex h-screen">
                 {/* Left Panel - Topics */}
-                <div className="w-72 p-6 border-r border-white/10 flex flex-col h-full">
+                <div className="w-80 py-6 px-5 border-r border-white/10 flex flex-col h-full">
                   {/* Topics Section */}
-                  <div className="flex flex-col">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-semibold text-white">Topics</h2>
+                  <div className="flex flex-col flex-grow">
+                    <div className="flex items-center justify-between mb-5">
+                      <h2 className="text-lg font-semibold text-white/90">Topics</h2>
                       <button
                         onClick={() => setIsCreatingTopic(true)}
-                        className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                        className="p-1.5 hover:bg-white/5 rounded-lg transition-colors"
                       >
-                        <PlusIcon className="w-5 h-5 text-white/60" />
+                        <PlusIcon className="w-5 h-5 text-white/60 hover:text-white/80 transition-colors" />
                       </button>
                     </div>
-                    <div className="h-[calc(100vh-320px)] overflow-y-auto mb-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent hover:scrollbar-thumb-white/20">
+                    <div className="flex-grow overflow-y-auto mb-4 -mx-2 px-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent hover:scrollbar-thumb-white/20">
                       <TopicList
                         topics={topics}
                         documents={documents}
@@ -366,100 +398,97 @@ export default function Documents() {
                         setTopicsSearchQuery={setTopicsSearchQuery}
                         onTopicSelect={handleTopicClick}
                         startEditingTopic={startEditingTopic}
-                        onCreateTopic={() => setIsCreatingTopic(true)}
+                        onCreateTopic={handleCreateTopicClick}
+                        onMoveToTopic={handleMultipleDocumentsMove}
+                        storageStats={{
+                          used: usedStorage,
+                          total: totalStorage,
+                          percentage: percentUsed
+                        }}
                       />
-                    </div>
-                  </div>
-
-                  {/* Storage Section - Below topics */}
-                  <div className="border-t border-white/10 pt-6">
-                    <div className="mb-4">
-                      <h3 className="text-sm font-medium text-white/60 mb-3">Storage</h3>
-                      <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-purple-500 to-purple-400" 
-                          style={{ width: `${Math.min(percentUsed, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/60">{usedStorage} used</span>
-                      <span className="text-white/40">{totalStorage} total</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Right Panel - Documents */}
-                <div className="flex-1 flex flex-col pl-6">
+                <div className="flex-1 py-6 px-5 overflow-hidden">
+                  {/* Documents Header */}
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-lg font-semibold text-white/90">Documents</h2>
+                  </div>
+
                   {/* Search and actions bar */}
                   <div className="flex-none mb-6">
-                    {/* Search, Filters and Actions Row */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between gap-4">
                       <SearchAndFilter
                         searchQuery={searchQuery}
                         onSearchChange={setSearchQuery}
                         sortBy={sortBy}
-                        onSortChange={(value) => setSortBy(value as DocumentSortType)}
+                        onSortChange={setSortBy}
                         fileTypeFilter={fileTypeFilter}
-                        onFilterChange={(value) => setFileTypeFilter(value)}
+                        onFilterChange={setFileTypeFilter}
+                        className="flex-1"
                       />
-                      <button
-                        onClick={() => setIsUploadDialogOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/90 hover:bg-purple-500 
-                          backdrop-blur-md text-white rounded-xl transition-all flex-shrink-0"
-                      >
-                        <ArrowUpTrayIcon className="w-5 h-5" />
-                        <span>Upload</span>
-                      </button>
-                      <ViewModeToggle
-                        viewMode={viewMode}
-                        onViewModeChange={setViewMode}
-                      />
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setIsUploadDialogOpen(true)}
+                          className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
+                        >
+                          <ArrowUpTrayIcon className="w-5 h-5" />
+                          <span>Upload</span>
+                        </button>
+                        <ViewModeToggle
+                          viewMode={viewMode}
+                          onViewModeChange={setViewMode}
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  {/* Documents list or empty state */}
-                  {filteredAndSortedDocuments.length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center">
-                      <div className="flex flex-col items-center p-8 bg-white/[0.02] rounded-2xl backdrop-blur-sm border border-white/[0.05] max-w-sm">
-                        <div className="w-12 h-12 mb-5 text-white/25">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                          </svg>
+                  {/* Document List Container */}
+                  <div className="h-[calc(100vh-25rem)] overflow-hidden pb-4 relative">
+                    {filteredAndSortedDocuments.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center h-full">
+                        <div className="flex flex-col items-center p-8 bg-white/[0.02] rounded-2xl backdrop-blur-sm border border-white/[0.05] max-w-sm">
+                          <div className="w-12 h-12 mb-5 text-white/25">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                          </div>
+                          <h3 className="text-lg font-medium text-white/90 mb-1.5">No documents found</h3>
+                          <p className="text-sm text-white/50 text-center mb-6">Upload some documents or try a different search</p>
+                          <button
+                            onClick={() => setIsUploadDialogOpen(true)}
+                            className="inline-flex items-center px-4 h-9 bg-purple-600/90 hover:bg-purple-600 transition-colors rounded-lg text-sm text-white/90 font-medium"
+                          >
+                            <svg className="w-4 h-4 mr-2 -ml-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                              <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                            </svg>
+                            Upload Document
+                          </button>
                         </div>
-                        <h3 className="text-lg font-medium text-white/90 mb-1.5">No documents found</h3>
-                        <p className="text-sm text-white/50 text-center mb-6">Upload some documents or try a different search</p>
-                        <button
-                          onClick={() => setIsUploadDialogOpen(true)}
-                          className="inline-flex items-center px-4 h-9 bg-purple-600/90 hover:bg-purple-600 transition-colors rounded-lg text-sm text-white/90 font-medium"
-                        >
-                          <svg className="w-4 h-4 mr-2 -ml-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
-                          </svg>
-                          Upload Document
-                        </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex-1 min-h-0 overflow-y-auto">
-                      <DocumentList
-                        documents={filteredAndSortedDocuments}
-                        viewMode={viewMode}
-                        selectedDocuments={selectedDocuments}
-                        onDocumentSelect={handleDocumentSelect}
-                        onDocumentClick={(doc) => console.log('clicked doc:', doc)}
-                        onDownload={handleDocumentDownloadWrapper}
-                        onRename={(doc) => setDocumentToRename(doc)}
-                        onDelete={handleDocumentDeleteWrapper}
-                        onUpload={() => setIsUploadDialogOpen(true)}
-                        downloadSelectedDocumentsAction={downloadSelectedDocuments}
-                        isDownloading={isDownloading}
-                        setSelectedDocumentsAction={setSelectedDocuments}
-                        onMoveToTopicAction={handleMultipleDocumentsMove}
-                        onBatchDeleteAction={handleMultipleDocumentsDelete}
-                      />
-                    </div>
-                  )}
+                    ) : (
+                      <div className="h-full">
+                        <DocumentList
+                          documents={filteredAndSortedDocuments}
+                          viewMode={viewMode}
+                          selectedDocuments={selectedDocuments}
+                          onDocumentSelect={handleDocumentSelect}
+                          onDocumentClick={handleDocumentClick}
+                          onDownload={handleDownloadWrapper}
+                          onRename={handleStartRenaming}
+                          onDelete={handleStartDeleting}
+                          onUpload={handleStartUpload}
+                          downloadSelectedDocumentsAction={downloadSelectedDocuments}
+                          isDownloading={isDownloading}
+                          setSelectedDocumentsAction={setSelectedDocuments}
+                          onMoveToTopicAction={handleMoveDocuments}
+                          onBatchDeleteAction={handleMultipleDocumentsDelete}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </DndProvider>
@@ -470,7 +499,7 @@ export default function Documents() {
               setSelectedDocumentsAction={setSelectedDocuments}
               downloadSelectedDocumentsAction={downloadSelectedDocuments}
               isDownloading={isDownloading}
-              onMoveToTopicAction={handleMultipleDocumentsMove}
+              onMoveToTopicAction={handleMoveDocuments}
               onDeleteAction={handleMultipleDocumentsDelete}
             />
           </PageTransition>

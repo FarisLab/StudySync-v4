@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { BaseDocument } from '@/app/types/document.types';
 import { ViewMode } from '@/app/types';
-import DocumentCard from './DocumentCard';
+import { LayoutGridIcon, ListIcon } from 'lucide-react';
+import { DocumentCard } from './DocumentCard';
 import { getFileIcon } from '@/app/utils/fileIcons';
 import { MultiDocumentActions } from './MultiDocumentActions';
 
@@ -9,7 +10,7 @@ interface DocumentListProps {
   documents: BaseDocument[];
   viewMode: ViewMode;
   selectedDocuments: BaseDocument[];
-  onDocumentSelect: (documentId: string, event?: React.MouseEvent) => void;
+  onDocumentSelect: (documentId: string, event?: React.MouseEvent, isCtrlPressed?: boolean) => void;
   onDocumentClick: (document: BaseDocument) => void;
   onDownload: (document: BaseDocument) => Promise<void>;
   onRename: (document: BaseDocument) => void;
@@ -20,6 +21,22 @@ interface DocumentListProps {
   setSelectedDocumentsAction: (documents: BaseDocument[]) => void;
   onMoveToTopicAction: (documents: BaseDocument[], topicId: string | null) => Promise<void>;
   onBatchDeleteAction: (documents: BaseDocument[]) => Promise<void>;
+}
+
+interface DocumentCardProps {
+  id?: string;
+  document: BaseDocument;
+  viewMode: ViewMode;
+  isSelected: boolean;
+  selectedDocuments?: BaseDocument[];
+  onSelect: (event: React.MouseEvent) => void;
+  onClick: (document: BaseDocument) => void;
+  onDownload?: (document: BaseDocument) => Promise<void>;
+  onRename?: (document: BaseDocument) => void;
+  onDelete?: (document: BaseDocument) => void;
+  isDragging?: boolean;
+  onDragStart?: (document: BaseDocument) => void;
+  onDragEnd?: () => void;
 }
 
 const DocumentList: React.FC<DocumentListProps> = ({
@@ -38,6 +55,35 @@ const DocumentList: React.FC<DocumentListProps> = ({
   onMoveToTopicAction,
   onBatchDeleteAction,
 }) => {
+  const [isAtTop, setIsAtTop] = useState(true);
+  const [isAtBottom, setIsAtBottom] = useState(false);
+  const [draggingDocumentId, setDraggingDocumentId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = useCallback(() => {
+    if (containerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+      setIsAtTop(scrollTop === 0);
+      setIsAtBottom(Math.abs(scrollHeight - clientHeight - scrollTop) < 1);
+    }
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll]);
+
+  const handleDragStart = (document: BaseDocument) => {
+    setDraggingDocumentId(document.id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingDocumentId(null);
+  };
+
   if (documents.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center px-4">
@@ -65,7 +111,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   }
 
   return (
-    <div className="relative">
+    <div className="h-full flex flex-col">
       {selectedDocuments.length > 0 && (
         <MultiDocumentActions
           selectedDocuments={selectedDocuments}
@@ -77,22 +123,31 @@ const DocumentList: React.FC<DocumentListProps> = ({
         />
       )}
       
-      <div className={`grid gap-4 ${
-        viewMode === 'grid' 
-          ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
-          : 'grid-cols-1'
-      }`}>
+      <div 
+        ref={containerRef}
+        className={`h-full overflow-y-auto scrollbar-none fade-mask ${
+          viewMode === 'grid'
+            ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4'
+            : 'flex flex-col space-y-2 p-2'
+        }`}
+        onScroll={handleScroll}
+      >
         {documents.map((document) => (
           <DocumentCard
             key={document.id}
+            id={`document-${document.id}`}
             document={document}
             viewMode={viewMode}
-            isSelected={selectedDocuments.some(d => d.id === document.id)}
-            onSelect={(e) => onDocumentSelect(document.id, e)}
+            isSelected={selectedDocuments.some((d) => d.id === document.id)}
+            selectedDocuments={selectedDocuments}
+            onSelect={(event) => onDocumentSelect(document.id, event, event.ctrlKey)}
             onClick={() => onDocumentClick(document)}
             onDownload={() => onDownload(document)}
             onRename={() => onRename(document)}
             onDelete={() => onDelete(document)}
+            isDragging={draggingDocumentId === document.id}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
           />
         ))}
       </div>

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { BaseDocument, DocumentType, DocumentSortType } from '@/app/types/document.types';
 import { User } from '@supabase/auth-helpers-nextjs';
 import { downloadMultipleDocuments, downloadBlob } from '@/app/utils/downloadUtils';
 import { toast } from 'sonner';
+import { cleanupOrphanedDocuments } from '../utils/storageUtils';
 
 const supabase = createClientComponentClient();
 
@@ -22,6 +23,7 @@ interface UseDocumentManagementProps {
  */
 export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManagementProps) => {
   const [documents, setDocuments] = useState<BaseDocument[]>([]);
+  const [filteredDocuments, setFilteredDocuments] = useState<BaseDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,6 +33,14 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
   const [selectedDocuments, setSelectedDocuments] = useState<BaseDocument[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Update filtered documents when selectedTopic changes
+  useEffect(() => {
+    const filtered = selectedTopic
+      ? documents.filter(doc => doc.topic_id === selectedTopic)
+      : documents;
+    setFilteredDocuments(filtered);
+  }, [selectedTopic, documents]);
+
   const fetchDocuments = useCallback(async () => {
     if (!user) return;
     
@@ -38,38 +48,54 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
     setError(null);
     
     try {
-      let query = supabase
+      // Fetch all documents for the user regardless of topic
+      const { data, error } = await supabase
         .from('documents')
         .select('*')
         .eq('user_id', user.id);
-        
-      if (selectedTopic) {
-        query = query.eq('topic_id', selectedTopic);
-      }
-      
-      const { data, error } = await query;
       
       if (error) throw error;
+
+      // Set documents immediately for optimistic loading
       setDocuments(data || []);
+      setIsLoading(false);
+      
+      // Clean up orphaned documents in the background
+      cleanupOrphanedDocuments(data || []).then(validDocuments => {
+        // Only update if there are any changes
+        if (validDocuments.length !== data?.length) {
+          setDocuments(validDocuments);
+        }
+      }).catch(err => {
+        console.error('Background cleanup error:', err);
+        // Don't set error state as this is a background operation
+      });
+      
     } catch (err) {
       console.error('Error fetching documents:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch documents');
-    } finally {
       setIsLoading(false);
     }
-  }, [user, selectedTopic]);
+  }, [user]);
 
   const handleDeleteDocument = async (document: BaseDocument) => {
     try {
       if (!user) throw new Error('User not authenticated');
+      if (!document.storage_path) throw new Error('Invalid document storage path');
+
+      // Start the deletion process
+      toast.loading('Deleting document...');
+
+      console.log('Attempting to delete file from storage:', document.storage_path);
 
       // First, try to delete from storage
-      const { error: storageError } = await supabase.storage
+      const { data: storageData, error: storageError } = await supabase.storage
         .from('documents')
         .remove([document.storage_path]);
 
       if (storageError) {
-        // If file doesn't exist in storage, continue with DB deletion
+        console.error('Storage deletion error:', storageError);
+        // Only throw if it's not a 'Not Found' error
         if (!storageError.message.includes('Not Found')) {
           throw storageError;
         }
@@ -79,18 +105,24 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
       const { error: dbError } = await supabase
         .from('documents')
         .delete()
-        .eq('id', document.id);
+        .eq('id', document.id)
+        .eq('user_id', user.id); // Add user_id check for extra security
 
       if (dbError) throw dbError;
 
       // Update local state
       setDocuments(prev => prev.filter(d => d.id !== document.id));
+      setFilteredDocuments(prev => prev.filter(d => d.id !== document.id));
       setSelectedDocuments(prev => prev.filter(d => d.id !== document.id));
+
+      // Show success message
+      toast.success('Document deleted successfully');
 
       return { success: true };
     } catch (err) {
       console.error('Error deleting document:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete document';
+      toast.error(`Error: ${errorMessage}`);
       setError(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -121,6 +153,13 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
             : doc
         )
       );
+      setFilteredDocuments(prev =>
+        prev.map(doc =>
+          doc.id === document.id
+            ? { ...doc, name: finalName }
+            : doc
+        )
+      );
 
       return { success: true };
     } catch (err) {
@@ -144,6 +183,14 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
       if (error) throw error;
 
       setDocuments(prev =>
+        prev.map(doc => {
+          if (doc.id === documentId) {
+            return { ...doc, topic_id: targetTopicId || undefined };
+          }
+          return doc;
+        })
+      );
+      setFilteredDocuments(prev =>
         prev.map(doc => {
           if (doc.id === documentId) {
             return { ...doc, topic_id: targetTopicId || undefined };
@@ -267,6 +314,14 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
           return doc;
         })
       );
+      setFilteredDocuments(prev =>
+        prev.map(doc => {
+          if (documents.some(d => d.id === doc.id)) {
+            return { ...doc, topic_id: topicId || undefined };
+          }
+          return doc;
+        })
+      );
 
       setSelectedDocuments([]);
       toast.success('Documents moved successfully');
@@ -278,53 +333,93 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
 
   const handleMultipleDocumentsDelete = async (documents: BaseDocument[]) => {
     try {
-      const { error } = await supabase
+      if (!user) throw new Error('User not authenticated');
+      
+      // Start the deletion process
+      toast.loading(`Deleting ${documents.length} documents...`);
+
+      // First, delete all files from storage
+      const storagePaths = documents
+        .filter(doc => doc.storage_path) // Filter out any documents without storage paths
+        .map(doc => doc.storage_path!);
+
+      if (storagePaths.length > 0) {
+        console.log('Attempting to delete files from storage:', storagePaths);
+        const { data: storageData, error: storageError } = await supabase.storage
+          .from('documents')
+          .remove(storagePaths);
+
+        if (storageError) {
+          console.error('Storage deletion error:', storageError);
+          // Only throw if it's not a 'Not Found' error
+          if (!storageError.message.includes('Not Found')) {
+            throw storageError;
+          }
+        }
+      }
+
+      // Then delete from database
+      const { error: dbError } = await supabase
         .from('documents')
         .delete()
-        .in('id', documents.map(d => d.id));
+        .in('id', documents.map(d => d.id))
+        .eq('user_id', user.id); // Add user_id check for extra security
 
-      if (error) throw error;
+      if (dbError) throw dbError;
 
+      // Update local state
       setDocuments(prev => prev.filter(doc => !documents.some(d => d.id === doc.id)));
+      setFilteredDocuments(prev => prev.filter(doc => !documents.some(d => d.id === doc.id)));
       setSelectedDocuments([]);
-      toast.success('Documents deleted successfully');
+
+      // Show success message
+      toast.success(`Successfully deleted ${documents.length} documents`);
     } catch (error) {
       console.error('Error deleting documents:', error);
-      toast.error('Failed to delete documents');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete documents';
+      toast.error(`Error: ${errorMessage}`);
     }
   };
 
   const filteredAndSortedDocuments = useMemo(() => {
-    let filtered = documents.filter(doc => {
-      if (fileTypeFilter === 'all') return true;
-      return doc.type === fileTypeFilter;
-    });
+    // Start with documents filtered by topic
+    let filtered = [...filteredDocuments];
 
+    // Apply search filter
     if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(doc =>
-        doc.name.toLowerCase().includes(searchLower)
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(doc => 
+        doc.name.toLowerCase().includes(query)
       );
     }
 
+    // Apply file type filter
+    if (fileTypeFilter !== 'all') {
+      filtered = filtered.filter(doc => doc.type === fileTypeFilter);
+    }
+
+    // Apply sorting
     filtered.sort((a, b) => {
-      const [sortKey, sortDirection] = sortBy.split('-');
-      const multiplier = sortDirection === 'asc' ? 1 : -1;
-      if (sortKey === 'name') {
-        return multiplier * a.name.localeCompare(b.name);
-      } else if (sortKey === 'date') {
-        return multiplier * (new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      } else if (sortKey === 'size') {
-        return multiplier * (b.size - a.size);
+      const [sortField, sortOrder] = sortBy.split('-');
+      const direction = sortOrder === 'desc' ? -1 : 1;
+
+      switch (sortField) {
+        case 'name':
+          return direction * a.name.localeCompare(b.name);
+        case 'date':
+          return direction * (new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        default:
+          return 0;
       }
-      return 0;
     });
 
     return filtered;
-  }, [documents, searchQuery, fileTypeFilter, sortBy]);
+  }, [filteredDocuments, searchQuery, fileTypeFilter, sortBy]);
 
   return {
     documents,
+    filteredDocuments,
+    filteredAndSortedDocuments,
     isLoading,
     error,
     searchQuery,
@@ -347,6 +442,5 @@ export const useDocumentManagement = ({ user, selectedTopic }: UseDocumentManage
     handleMultipleDocumentsDelete,
     handleDocumentSelect,
     fetchDocuments,
-    filteredAndSortedDocuments,
   };
 };

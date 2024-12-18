@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   CheckIcon,
@@ -9,41 +9,42 @@ import {
 } from '@heroicons/react/24/outline';
 import { BaseDocument, ViewMode } from '@/app/types/document.types';
 import { getFileIcon } from '@/app/utils/fileIcons';
-import DeleteConfirmationDialog from '@/app/components/dialogs/DeleteConfirmationDialog'; // Assuming the DeleteConfirmationDialog component is in the same directory
+import { getFileType, formatFileSize } from '@/app/utils/fileUtils';
+import DeleteConfirmationDialog from '@/app/components/dialogs/DeleteConfirmationDialog';
 
 // Utility functions
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-};
+const isGridMode = (mode: ViewMode) => mode === 'grid';
 
 /**
  * Props for the DocumentCard component
  */
 interface DocumentCardProps {
+  /** HTML id for the document card element */
+  id?: string;
   /** The document to display */
   document: BaseDocument;
   /** Current view mode (grid or list) */
   viewMode: ViewMode;
   /** Whether the document is currently selected */
-  isSelected?: boolean;
+  isSelected: boolean;
+  /** List of all selected documents */
+  selectedDocuments?: BaseDocument[];
   /** Handler for document selection */
-  onSelect?: (event: React.MouseEvent) => void;
+  onSelect: (event: React.MouseEvent) => void;
   /** Handler for document click */
-  onClick?: () => void;
-  /** Handler for context menu */
-  onContextMenu?: (e: React.MouseEvent) => void;
+  onClick: (document: BaseDocument) => void;
   /** Handler for document download */
-  onDownload: () => void;
+  onDownload?: (document: BaseDocument) => Promise<void>;
   /** Handler for document deletion */
-  onDelete?: () => void;
+  onDelete?: (document: BaseDocument) => void;
   /** Handler for document rename */
-  onRename?: () => void;
-  /** Props for drag handle functionality */
-  dragHandleProps?: any;
+  onRename?: (document: BaseDocument) => void;
+  /** Whether the document is being dragged */
+  isDragging?: boolean;
+  /** Handler for drag start */
+  onDragStart?: (document: BaseDocument) => void;
+  /** Handler for drag end */
+  onDragEnd?: () => void;
 }
 
 /**
@@ -57,43 +58,101 @@ interface DocumentCardProps {
  * - Handles document selection through click events
  * - Shows topic association if document belongs to a topic
  */
-const DocumentCard: React.FC<DocumentCardProps> = ({
+export const DocumentCard: React.FC<DocumentCardProps> = ({
+  id,
   document,
   viewMode,
   isSelected,
+  selectedDocuments,
   onSelect,
   onClick,
-  onContextMenu,
   onDownload,
   onDelete,
   onRename,
-  dragHandleProps,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const formattedDate = formatDistanceToNow(new Date(document.created_at), { addSuffix: true });
-  const formattedSize = formatFileSize(document.size);
+  const deleteConfirmRef = useRef<HTMLDivElement>(null);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    e.stopPropagation();
     setShowMenu(true);
   };
 
   const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
-    onSelect?.(e);
+    
+    onSelect(e);
   };
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+    if (onDragStart) {
+      onDragStart(document);
+    }
+    // Set drag data for all selected documents if this document is selected
+    if (selectedDocuments && isSelected) {
+      e.dataTransfer.setData('text/plain', JSON.stringify({
+        type: 'documents',
+        documents: selectedDocuments
+      }));
+    } else {
+      e.dataTransfer.setData('text/plain', JSON.stringify({
+        type: 'documents',
+        documents: [document]
+      }));
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (onDragEnd) {
+      onDragEnd();
+    }
+  };
+
+  const dragAttributes = {
+    draggable: true,
+    onDragStart: handleDragStart,
+    onDragEnd: handleDragEnd,
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+      if (deleteConfirmRef.current && !deleteConfirmRef.current.contains(event.target as Node)) {
+        setShowDeleteConfirm(false);
+      }
+    };
+
+    window.document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const formattedDate = formatDistanceToNow(new Date(document.created_at), { addSuffix: true });
+  const formattedSize = formatFileSize(document.size);
+  const fileType = getFileType(document.name);
+  const icon = getFileIcon(fileType);
 
   if (isGridMode(viewMode)) {
     return (
       <div
+        id={id}
+        {...dragAttributes}
         className={`group relative bg-black/40 backdrop-blur-md border border-white/10 rounded-lg overflow-hidden 
-          hover:bg-black/30 transition-all cursor-pointer`}
+          hover:bg-black/30 transition-all cursor-pointer ${
+            isDragging ? 'opacity-50' : ''
+          }`}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        {...dragHandleProps}
       >
         {/* Selection Indicators */}
         <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl transition-colors
@@ -121,7 +180,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
                   document.type === 'spreadsheet' ? 'text-emerald-500' :
                   document.type === 'presentation' ? 'text-orange-500' :
                   'text-white/60'}`}>
-                {getFileIcon(document.name)}
+                {icon}
               </div>
             </div>
             <div className="flex-1 min-w-0">
@@ -145,7 +204,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDownload();
+                  onDownload && onDownload(document);
                 }}
                 className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
               >
@@ -182,7 +241,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onRename();
+                    onRename(document);
                     setShowMenu(false);
                   }}
                   className="w-full px-4 py-2 text-sm text-white/60 hover:text-white hover:bg-white/10 
@@ -214,7 +273,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
             isOpen={showDeleteConfirm}
             onCloseAction={() => setShowDeleteConfirm(false)}
             onConfirmAction={() => {
-              onDelete();
+              onDelete(document);
               setShowDeleteConfirm(false);
             }}
             title="Delete Document"
@@ -227,13 +286,16 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
 
   return (
     <div
+      id={id}
+      {...dragAttributes}
       className={`group relative flex items-center hover:bg-white/5 transition-all w-full cursor-pointer
         ${isGridMode(viewMode) 
           ? 'bg-black/20 backdrop-blur-md rounded-xl overflow-hidden border border-white/5 hover:border-white/10' 
-          : 'border-b border-white/5'}`}
+          : 'border-b border-white/5'} ${
+            isDragging ? 'opacity-50' : ''
+          }`}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
-      {...dragHandleProps}
     >
       {/* Selection Indicator */}
       <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl transition-colors
@@ -261,7 +323,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
                 document.type === 'spreadsheet' ? 'text-emerald-500' :
                 document.type === 'presentation' ? 'text-orange-500' :
                 'text-white/60'}`}>
-              {getFileIcon(document.name)}
+              {icon}
             </div>
           </div>
         </div>
@@ -294,7 +356,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onDownload();
+              onDownload && onDownload(document);
             }}
             className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
           >
@@ -324,7 +386,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onRename();
+                  onRename(document);
                   setShowMenu(false);
                 }}
                 className="w-full px-4 py-2 text-sm text-white/60 hover:text-white hover:bg-white/10 
@@ -356,7 +418,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
           isOpen={showDeleteConfirm}
           onCloseAction={() => setShowDeleteConfirm(false)}
           onConfirmAction={() => {
-            onDelete();
+            onDelete(document);
             setShowDeleteConfirm(false);
           }}
           title="Delete Document"
@@ -366,5 +428,3 @@ const DocumentCard: React.FC<DocumentCardProps> = ({
     </div>
   );
 };
-
-export default DocumentCard;

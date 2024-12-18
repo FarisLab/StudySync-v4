@@ -10,6 +10,7 @@ interface SearchAndFilterProps {
   onSortChange: (sort: DocumentSortType) => void;
   fileTypeFilter: DocumentType | 'all';
   onFilterChange: (filter: DocumentType | 'all') => void;
+  className?: string;
 }
 
 const SearchAndFilter: React.FC<SearchAndFilterProps> = ({
@@ -19,9 +20,10 @@ const SearchAndFilter: React.FC<SearchAndFilterProps> = ({
   onSortChange,
   fileTypeFilter,
   onFilterChange,
+  className,
 }) => {
   return (
-    <div className="flex items-center gap-3 flex-1">
+    <div className={[className, "flex items-center gap-3 flex-1"].filter(Boolean).join(' ')}>
       {/* Search Bar */}
       <div className="relative flex-1">
         <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/40" />

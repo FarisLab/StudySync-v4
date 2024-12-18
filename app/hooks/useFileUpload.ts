@@ -106,9 +106,10 @@ const getFileType = (extension?: string): string | null => {
   if (!extension) return null;
 
   const imageTypes = ['jpg', 'jpeg', 'png', 'gif'];
-  const documentTypes = ['pdf', 'doc', 'docx'];
+  const documentTypes = ['doc', 'docx'];
   const presentationTypes = ['ppt', 'pptx'];
 
+  if (extension === 'pdf') return 'pdf';
   if (imageTypes.includes(extension)) return 'image';
   if (documentTypes.includes(extension)) return 'document';
   if (presentationTypes.includes(extension)) return 'presentation';

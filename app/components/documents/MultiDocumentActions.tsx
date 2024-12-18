@@ -8,10 +8,17 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import DeleteConfirmationDialog from '@/app/components/dialogs/DeleteConfirmationDialog';
 import { BaseDocument } from '@/app/types/document.types';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Topic } from '@/app/types';
+import { getTopicIcon } from '@/app/utils/topicIcons';
+import { ProgressRing } from '../ui/ProgressRing';
+import { useDocumentOperations } from '@/app/contexts/DocumentOperationsContext';
+
+const supabase = createClientComponentClient();
 
 /**
  * Interface for MultiDocumentActions component props
@@ -33,15 +40,6 @@ interface MultiDocumentActionsProps {
 
 /**
  * Component that displays actions available for selected documents
- * 
- * Features:
- * - Move documents to a topic
- * - Download selected documents as zip
- * - Delete selected documents
- * - Clear selection
- * 
- * The component appears as a floating action bar at the bottom of the screen
- * when one or more documents are selected.
  */
 export function MultiDocumentActions({
   selectedDocuments,
@@ -53,6 +51,49 @@ export function MultiDocumentActions({
 }: MultiDocumentActionsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showTopicMenu, setShowTopicMenu] = useState(false);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+  const { moveProgress, startMoveProgress } = useDocumentOperations();
+
+  useEffect(() => {
+    const fetchTopics = async () => {
+      setIsLoadingTopics(true);
+      try {
+        const { data: topics, error } = await supabase
+          .from('topics')
+          .select('*')
+          .order('name');
+
+        if (error) throw error;
+        setTopics(topics || []);
+      } catch (error) {
+        console.error('Error fetching topics:', error);
+      } finally {
+        setIsLoadingTopics(false);
+      }
+    };
+
+    fetchTopics();
+  }, []);
+
+  const handleMoveToTopic = async (topicId: string | null) => {
+    setShowTopicMenu(false);
+    
+    try {
+      // Get the source topic ID (use the first selected document's topic)
+      const sourceTopicId = selectedDocuments[0]?.topic_id || null;
+      
+      // Start progress animation
+      await startMoveProgress(sourceTopicId, topicId);
+      
+      // Move the documents
+      await onMoveToTopic(selectedDocuments, topicId);
+    } catch (error) {
+      console.error('Error moving documents:', error);
+    } finally {
+      setSelectedDocuments([]);
+    }
+  };
 
   if (selectedDocuments.length === 0) return null;
 
@@ -68,9 +109,35 @@ export function MultiDocumentActions({
         >
           {/* Selection Info */}
           <div className="flex items-center gap-2 px-2">
-            <div className="w-6 h-6 flex items-center justify-center rounded-full bg-purple-500/20">
-              <Folder className="w-4 h-4 text-purple-500" />
-            </div>
+            <AnimatePresence mode="wait">
+              {moveProgress ? (
+                <motion.div
+                  key="progress"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-6 h-6"
+                >
+                  <ProgressRing
+                    progress={moveProgress.progress}
+                    size={24}
+                    strokeWidth={2}
+                  >
+                    <Folder className="w-3 h-3 text-purple-500" />
+                  </ProgressRing>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="folder"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-6 h-6 flex items-center justify-center rounded-full bg-purple-500/20"
+                >
+                  <Folder className="w-4 h-4 text-purple-500" />
+                </motion.div>
+              )}
+            </AnimatePresence>
             <span className="text-sm font-medium text-white">
               {selectedDocuments.length} {selectedDocuments.length === 1 ? 'document' : 'documents'} selected
             </span>
@@ -87,6 +154,7 @@ export function MultiDocumentActions({
                 variant="ghost"
                 size="sm"
                 className="flex items-center gap-2"
+                disabled={moveProgress !== null}
               >
                 <Folder className="w-4 h-4" />
                 Move to
@@ -99,19 +167,45 @@ export function MultiDocumentActions({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 8 }}
                     className="absolute bottom-full left-0 mb-2 w-56 py-1 
-                      bg-black/40 backdrop-blur-md border border-white/10 rounded-xl shadow-xl"
+                      bg-black/40 backdrop-blur-md border border-white/10 rounded-xl shadow-xl overflow-hidden"
                   >
-                    <Button
-                      onClick={() => {
-                        onMoveToTopic(selectedDocuments, null);
-                        setShowTopicMenu(false);
-                      }}
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start"
-                    >
-                      No Topic
-                    </Button>
+                    {isLoadingTopics ? (
+                      <div className="flex items-center justify-center py-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-white/60" />
+                      </div>
+                    ) : (
+                      <>
+                        <Button
+                          onClick={() => handleMoveToTopic(null)}
+                          variant="ghost"
+                          size="sm"
+                          className="w-full justify-start gap-2"
+                        >
+                          <Folder className="w-4 h-4 text-white/60" />
+                          No Topic
+                        </Button>
+
+                        {topics.length > 0 && (
+                          <div className="h-px w-full bg-white/10 my-1" />
+                        )}
+
+                        {topics.map((topic) => {
+                          const TopicIcon = getTopicIcon(topic.icon);
+                          return (
+                            <Button
+                              key={topic.id}
+                              onClick={() => handleMoveToTopic(topic.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start gap-2"
+                            >
+                              <TopicIcon className="w-4 h-4 text-white/60" />
+                              {topic.name}
+                            </Button>
+                          );
+                        })}
+                      </>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -120,7 +214,7 @@ export function MultiDocumentActions({
             {/* Download */}
             <Button
               onClick={downloadSelectedDocuments}
-              disabled={isDownloading}
+              disabled={isDownloading || moveProgress !== null}
               variant="ghost"
               size="sm"
               className="flex items-center gap-2"
@@ -141,6 +235,7 @@ export function MultiDocumentActions({
             {/* Delete */}
             <Button
               onClick={() => setShowDeleteConfirm(true)}
+              disabled={moveProgress !== null}
               variant="ghost"
               size="sm"
               className="flex items-center gap-2 text-red-400/80 
@@ -154,6 +249,7 @@ export function MultiDocumentActions({
             <div className="h-4 w-px bg-white/10 mx-1" />
             <Button
               onClick={() => setSelectedDocuments([])}
+              disabled={moveProgress !== null}
               variant="ghost"
               size="sm"
               className="p-1.5 text-white/60 hover:text-white"

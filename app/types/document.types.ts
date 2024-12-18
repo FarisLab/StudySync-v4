@@ -2,7 +2,7 @@
  * Core document types for StudySync
  */
 
-export type DocumentType = 'pdf' | 'doc' | 'docx' | 'txt' | 'md' | 'other';
+export type DocumentType = 'document' | 'presentation' | 'spreadsheet' | 'pdf' | 'image' | 'video' | 'text' | 'other';
 
 export type DocumentSortType = 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'size-asc' | 'size-desc';
 

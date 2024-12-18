@@ -56,7 +56,11 @@ const Sidebar: React.FC<SidebarProps> = ({ className = '', storageLimit = 5 * 10
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClientComponentClient();
-  const [storageUsed, setStorageUsed] = useState(0);
+  const [storageStats, setStorageStats] = useState<StorageStats>({
+    used: 0,
+    total: storageLimit,
+    percentage: 0
+  });
 
   useEffect(() => {
     const calculateStorageUsed = async () => {
@@ -68,18 +72,32 @@ const Sidebar: React.FC<SidebarProps> = ({ className = '', storageLimit = 5 * 10
 
         if (error) throw error;
 
-        const totalBytes = data.reduce((acc, doc) => acc + doc.size, 0);
-        const totalGB = totalBytes / (1024 * 1024 * 1024);
-        const percentage = Math.min(Math.round((totalGB / 2) * 100), 100); // Assuming 2GB limit
-        setStorageUsed(percentage);
+        const totalBytes = data.reduce((acc, doc) => acc + (doc.size || 0), 0);
+        setStorageStats({
+          used: totalBytes,
+          total: storageLimit,
+          percentage: Math.min((totalBytes / storageLimit) * 100, 100)
+        });
       } catch (error) {
         console.error('Error calculating storage:', error);
-        setStorageUsed(0);
+        setStorageStats({
+          used: 0,
+          total: storageLimit,
+          percentage: 0
+        });
       }
     };
 
     calculateStorageUsed();
-  }, [supabase]);
+  }, [supabase, storageLimit]);
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -100,69 +118,54 @@ const Sidebar: React.FC<SidebarProps> = ({ className = '', storageLimit = 5 * 10
                 href={item.href}
                 className={`group relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
                   isActive
-                    ? 'bg-white/10 text-white'
-                    : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                    ? 'bg-purple-500/20 text-purple-500'
+                    : 'text-white/60 hover:bg-white/5 hover:text-white'
                 }`}
               >
                 <item.icon className="h-5 w-5" />
-                {/* Tooltip */}
-                <span className="absolute left-full ml-2 w-auto min-w-max rounded bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow transition-opacity group-hover:opacity-100">
+                {item.badge && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-purple-500 px-1 text-[10px] font-medium text-white">
+                    {item.badge}
+                  </span>
+                )}
+                <span className="absolute left-14 z-50 w-auto min-w-max origin-left scale-0 rounded-lg bg-gray-900 px-2 py-1 text-sm text-white shadow-md transition-all group-hover:scale-100">
                   {item.name}
-                  {item.badge && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px]">
-                      {item.badge}
-                    </span>
-                  )}
                 </span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="px-2 space-y-2">
-          {/* Storage Indicator */}
+        {/* Bottom Section */}
+        <div className="px-2 space-y-4">
+          {/* Storage Section */}
           <div className="group relative">
-            <div className="h-10 w-10 rounded-lg bg-white/5 p-1">
-              <div className="relative h-full w-full">
-                <svg className="h-full w-full" viewBox="0 0 36 36">
-                  {/* Background circle */}
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="16"
-                    fill="none"
-                    className="stroke-white/10"
-                    strokeWidth="3"
+            <div className="h-10 w-10 flex items-center justify-center text-white/60">
+              <div className="w-6 h-6">
+                <div className="w-full h-1 bg-white/10 rounded-full">
+                  <div
+                    className="h-full bg-purple-500 rounded-full"
+                    style={{ width: `${storageStats.percentage}%` }}
                   />
-                  {/* Progress circle */}
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="16"
-                    fill="none"
-                    className="stroke-blue-500"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeDasharray={`${storageUsed}, 100`}
-                    transform="rotate(-90 18 18)"
-                  />
-                  {/* Percentage text */}
-                  <text
-                    x="18"
-                    y="18"
-                    textAnchor="middle"
-                    dy=".3em"
-                    className="fill-current text-xs font-medium text-white"
-                  >
-                    {storageUsed}%
-                  </text>
-                </svg>
+                </div>
               </div>
             </div>
             {/* Storage tooltip */}
-            <span className="absolute left-full bottom-0 ml-2 w-auto min-w-max rounded bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow transition-opacity group-hover:opacity-100">
-              Storage Used: {storageUsed}%
-            </span>
+            <div className="absolute left-14 bottom-0 z-50 w-48 origin-left scale-0 rounded-lg bg-gray-900 p-2 text-sm text-white shadow-md transition-all group-hover:scale-100">
+              <h3 className="mb-1 font-medium">Storage</h3>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-white/60">{formatBytes(storageStats.used)} used</span>
+                  <span className="text-white/40">{formatBytes(storageStats.total)} total</span>
+                </div>
+                <div className="w-full h-1 bg-white/10 rounded-full">
+                  <div
+                    className="h-full bg-purple-500 rounded-full"
+                    style={{ width: `${storageStats.percentage}%` }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Sign Out Button */}

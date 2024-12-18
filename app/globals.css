@@ -2,6 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;     /* Firefox */
+  }
+  
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;            /* Chrome, Safari and Opera */
+  }
+
+  .fade-mask {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black 10%,
+      black 90%,
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black 10%,
+      black 90%,
+      transparent 100%
+    );
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -22,41 +50,33 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Custom Scrollbar */
-.custom-scrollbar {
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: rgba(139, 92, 246, 0.3) rgba(255, 255, 255, 0.1); /* Firefox */
-}
-
-.custom-scrollbar::-webkit-scrollbar {
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.01);
+  border-radius: 100vh;
+  margin: 0.5rem;
+}
+
+::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  margin: 1px;
+  border-radius: 100vh;
+  backdrop-filter: blur(4px);
+  transition: background-color 0.2s ease-in-out;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.3);
-  border-radius: 3px;
-  transition: background-color 0.2s, opacity 0.2s;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.4);
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.5);
-}
-
-/* Hide scrollbar by default */
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  opacity: 0;
-}
-
-/* Show scrollbar on hover */
-.custom-scrollbar:hover::-webkit-scrollbar-thumb {
-  opacity: 1;
+/* Firefox Scrollbar Styles */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) rgba(255, 255, 255, 0.01);
 }
 
 /* Custom select styling */
