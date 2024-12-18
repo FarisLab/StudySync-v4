@@ -52,6 +52,9 @@ All notable changes to StudySync will be documented in this file.
   - Updated README.md with latest features
   - Added comprehensive JSDoc documentation to key components
   - Documented document management functionality
+- Enhanced document move animations with directional indicators
+- Added visual completion feedback for document moves
+- Improved progress ring animations with smoother transitions
 
 ### Changed
 - Updated UI components to use glassmorphic design
@@ -63,6 +66,9 @@ All notable changes to StudySync will be documented in this file.
 - Simplified document selection UX
 - Updated component documentation for better maintainability
 - Improved type definitions and interfaces
+- Updated document move progress tracking to include source and target topics
+- Refined animation timings for better user experience
+- Modified progress ring to show green checkmark on completion
 
 ### Fixed
 - Document sorting performance issues
