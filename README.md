@@ -119,6 +119,10 @@ A modern document management system built with Next.js 13+, Supabase, and Tailwi
 
 ### Documentation
 
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [API Documentation](docs/API.md)
+- [Contributing Guide](docs/CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 - JSDoc comments
 - Updated README.md
 - Maintained CHANGELOG.md
