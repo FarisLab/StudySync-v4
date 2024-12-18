@@ -1,6 +1,13 @@
 # StudySync
 
-A modern document management system built with Next.js 13+, Supabase, and Tailwind CSS.
+A modern document management and study organization platform built with Next.js 13+.
+
+## Documentation
+
+- [Architecture Overview](./docs/ARCHITECTURE.md) - Detailed project architecture, technology stack, and data flow
+- [API Documentation](./docs/API.md) - Component APIs, hooks, and type definitions
+- [Contributing Guide](./docs/CONTRIBUTING.md) - Setup instructions and development guidelines
+- [Changelog](./CHANGELOG.md) - Version history and latest changes
 
 ## Features
 
@@ -119,10 +126,6 @@ A modern document management system built with Next.js 13+, Supabase, and Tailwi
 
 ### Documentation
 
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [API Documentation](docs/API.md)
-- [Contributing Guide](docs/CONTRIBUTING.md)
-- [Changelog](CHANGELOG.md)
 - JSDoc comments
 - Updated README.md
 - Maintained CHANGELOG.md
